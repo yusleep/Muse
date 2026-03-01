@@ -1011,21 +1011,75 @@ def _extract_xml_tag(xml_fragment: str, tag: str) -> str:
     return re.sub(r"\s+", " ", match.group(1)).strip()
 
 
+def _fix_invalid_escapes(s: str) -> str:
+    """Fix invalid JSON escape sequences by properly escaping lone backslashes.
+
+    Handles cases like LaTeX \\alpha, \\unicode (non-4-hex \\u), etc.
+    Correctly skips already-valid escapes (\\\\, \\n, \\uXXXX, etc.).
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c != "\\":
+            result.append(c)
+            i += 1
+            continue
+        if i + 1 >= len(s):
+            # Trailing lone backslash
+            result.append("\\\\")
+            i += 1
+            continue
+        nc = s[i + 1]
+        if nc in '"\\\/bfnrt':
+            # Valid simple escape – keep as-is
+            result.append(c)
+            result.append(nc)
+            i += 2
+        elif nc == "u":
+            hex_digits = s[i + 2 : i + 6]
+            if len(hex_digits) == 4 and all(h in "0123456789abcdefABCDEF" for h in hex_digits):
+                # Valid \uXXXX
+                result.append(s[i : i + 6])
+                i += 6
+            else:
+                # Invalid \u (e.g. \unicode) – escape the backslash only
+                result.append("\\\\")
+                i += 1
+        else:
+            # Invalid escape (e.g. \p, \alpha) – escape the backslash only
+            result.append("\\\\")
+            i += 1
+    return "".join(result)
+
+
 def _parse_json_relaxed(raw: str) -> Any:
+    def _try_loads(s: str) -> Any:
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            fixed = _fix_invalid_escapes(s)
+            if fixed != s:
+                return json.loads(fixed)
+            raise
+
     try:
-        return json.loads(raw)
+        return _try_loads(raw)
     except json.JSONDecodeError:
         pass
 
     fenced = re.search(r"```json\s*(\{.*?\})\s*```", raw, flags=re.DOTALL)
     if fenced:
-        return json.loads(fenced.group(1))
+        try:
+            return _try_loads(fenced.group(1))
+        except json.JSONDecodeError:
+            pass
 
     # Try bracket extraction fallback.
     start = raw.find("{")
     end = raw.rfind("}")
     if start >= 0 and end > start:
-        return json.loads(raw[start : end + 1])
+        return _try_loads(raw[start : end + 1])
 
     raise ProviderError("Could not parse JSON from LLM response")
 
