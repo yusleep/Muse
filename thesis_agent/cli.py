@@ -27,14 +27,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--discipline", default="general")
     run.add_argument("--language", default="zh")
     run.add_argument("--format-standard", default="GB/T 7714-2015")
-    run.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "docx"])
+    run.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
     run.add_argument("--auto-approve", action="store_true", help="Skip HITL pauses")
     run.set_defaults(func=cmd_run)
 
     resume = sub.add_parser("resume", help="Resume an existing run")
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--start-stage", type=int, default=0)
-    resume.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "docx"])
+    resume.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
     resume.add_argument("--auto-approve", action="store_true")
     resume.set_defaults(func=cmd_resume)
 
@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     export = sub.add_parser("export", help="Run export stage only")
     export.add_argument("--run-id", required=True)
-    export.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "docx"])
+    export.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
     export.set_defaults(func=cmd_export)
 
     return parser

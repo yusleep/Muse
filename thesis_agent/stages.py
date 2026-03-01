@@ -228,17 +228,25 @@ def stage6_export(state: dict[str, Any], store: Any, run_id: str, output_format:
     )
 
     fmt = output_format.lower().strip()
+
+    # Always write the markdown source first – it's the pandoc input and a
+    # useful artefact on its own.
+    md_path = store.artifact_path(run_id, "output/thesis.md")
+    os.makedirs(os.path.dirname(md_path), exist_ok=True)
+    with open(md_path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
     if fmt in {"md", "markdown"}:
-        path = store.artifact_path(run_id, "output/thesis.md")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
+        path = md_path
     elif fmt == "latex":
         path = store.artifact_path(run_id, "output/thesis.tex")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(_to_latex(text, title=state.get("topic", "Thesis")))
+        _pandoc_export(md_path, path, "latex")
+    elif fmt == "pdf":
+        path = store.artifact_path(run_id, "output/thesis.pdf")
+        _pandoc_export(md_path, path, "pdf")
     elif fmt == "docx":
         path = store.artifact_path(run_id, "output/thesis.docx")
-        _write_docx(path, state.get("topic", "Thesis"), text)
+        _pandoc_export(md_path, path, "docx")
     else:
         raise ValueError(f"Unsupported output format: {output_format}")
 
@@ -432,40 +440,69 @@ def _fallback_outline(topic: str) -> list[dict[str, Any]]:
     ]
 
 
-def _to_latex(text: str, title: str) -> str:
-    escaped = (
-        text.replace("\\", "\\textbackslash{}")
-        .replace("&", "\\&")
-        .replace("%", "\\%")
-        .replace("$", "\\$")
-        .replace("#", "\\#")
-        .replace("_", "\\_")
-        .replace("{", "\\{")
-        .replace("}", "\\}")
-    )
-    return (
-        "\\documentclass{article}\n"
-        "\\usepackage[UTF8]{ctex}\n"
-        "\\begin{document}\n"
-        f"\\title{{{title}}}\n"
-        "\\maketitle\n"
-        f"{escaped}\n"
-        "\\end{document}\n"
-    )
+def _pandoc_export(md_path: str, output_path: str, fmt: str) -> None:
+    """Convert the markdown thesis to *fmt* using pandoc.
 
+    fmt values:
+      "latex"  → thesis.tex  (ctexart, CJK fonts, math-aware)
+      "pdf"    → thesis.pdf  (xelatex) + thesis.tex alongside it
+      "docx"   → thesis.docx
 
-def _write_docx(path: str, title: str, text: str) -> None:
-    try:
-        from docx import Document  # type: ignore
-    except Exception as exc:  # noqa: BLE001
+    Raises RuntimeError with an actionable message when pandoc / xelatex is
+    not found, or when pandoc exits with a non-zero status.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("pandoc"):
         raise RuntimeError(
-            "Output format docx requires python-docx (`pip install python-docx`)."
-        ) from exc
+            "pandoc is not installed. Install with: sudo apt-get install pandoc"
+        )
 
-    doc = Document()
-    doc.add_heading(title, level=1)
-    for para in text.split("\n\n"):
-        if para.strip():
-            doc.add_paragraph(para.strip())
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    doc.save(path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # Shared args for CJK academic output (latex / pdf)
+    _cjk = [
+        "--from", "markdown+tex_math_single_backslash",
+        "-V", "documentclass=ctexart",
+        "-V", "classoption=UTF8,a4paper,12pt",
+        "-V", "geometry:top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm",
+        "-V", "CJKmainfont=Noto Serif CJK SC",
+        "-V", "CJKsansfont=Noto Sans CJK SC",
+        "-V", "CJKmonofont=Noto Sans CJK SC",
+        "-V", "linestretch=1.5",
+        "--toc", "--toc-depth=3", "--number-sections",
+    ]
+
+    def _run(args: list[str]) -> None:
+        result = subprocess.run(args, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"pandoc failed (exit {result.returncode}):\n"
+                + (result.stderr or result.stdout)[-2000:]
+            )
+
+    if fmt == "latex":
+        _run(["pandoc", md_path] + _cjk + ["-o", output_path])
+
+    elif fmt == "pdf":
+        if not shutil.which("xelatex"):
+            raise RuntimeError(
+                "xelatex is not installed. Install with: "
+                "sudo apt-get install texlive-xetex texlive-lang-chinese"
+            )
+        # Emit .tex alongside the PDF so the source is available
+        tex_path = os.path.splitext(output_path)[0] + ".tex"
+        _run(["pandoc", md_path] + _cjk + ["-o", tex_path])
+        _run(["pandoc", md_path] + _cjk + ["--pdf-engine=xelatex", "-o", output_path])
+
+    elif fmt == "docx":
+        _run([
+            "pandoc", md_path,
+            "--from", "markdown+tex_math_single_backslash",
+            "--toc", "--toc-depth=3", "--number-sections",
+            "-o", output_path,
+        ])
+
+    else:
+        raise ValueError(f"_pandoc_export: unsupported fmt {fmt!r}")
