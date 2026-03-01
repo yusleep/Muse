@@ -1,0 +1,66 @@
+{
+  "auth": {
+    "profiles": {
+      "nhh": {
+        "apiKeyEnv": "NHH_API_KEY"
+      }
+    }
+  },
+  "providers": {
+    "nhh": {
+      "baseUrl": "https://api.123nhh.me/v1",
+      "auth": "nhh",
+      "models": {
+        "nhh/default": {
+          "model": "gpt-5.2"
+        },
+        "nhh/reasoning": {
+          "model": "gpt-5"
+        },
+        "nhh/fallback": {
+          "model": "gpt-5.1"
+        }
+      }
+    }
+  },
+  "models": {
+    "default": {
+      "primary": "nhh/default",
+      "fallbacks": [
+        "nhh/fallback"
+      ]
+    },
+    "outline": {
+      "primary": "nhh/default",
+      "fallbacks": [
+        "nhh/fallback"
+      ]
+    },
+    "writing": {
+      "primary": "nhh/default",
+      "fallbacks": [
+        "nhh/fallback"
+      ]
+    },
+    "review": {
+      "primary": "nhh/default",
+      "fallbacks": [
+        "nhh/fallback"
+      ]
+    },
+    "reasoning": {
+      "primary": "nhh/reasoning",
+      "fallbacks": [
+        "nhh/default",
+        "nhh/fallback"
+      ]
+    },
+    "polish": {
+      "primary": "nhh/default",
+      "fallbacks": [
+        "nhh/fallback"
+      ]
+    }
+  },
+  "modelAliases": {}
+}

@@ -1,0 +1,71 @@
+{
+  "auth": {
+    "profiles": {
+      "codex_plus_oauth": {
+        "type": "oauth",
+        "oauthProvider": "codex",
+        "authFile": "~/.codex/auth.json",
+        "tokenPath": "tokens.access_token"
+      }
+    }
+  },
+  "providers": {
+    "codex_plus": {
+      "baseUrl": "https://chatgpt.com/backend-api",
+      "apiStyle": "responses",
+      "codexOAuth": true,
+      "auth": "codex_plus_oauth",
+      "models": {
+        "codex_plus/default": {
+          "model": "gpt-5.3-codex"
+        },
+        "codex_plus/reasoning": {
+          "model": "gpt-5.3-codex"
+        },
+        "codex_plus/fallback": {
+          "model": "gpt-5.1-codex"
+        }
+      }
+    }
+  },
+  "models": {
+    "default": {
+      "primary": "codex_plus/default",
+      "fallbacks": [
+        "codex_plus/fallback"
+      ]
+    },
+    "outline": {
+      "primary": "codex_plus/default",
+      "fallbacks": [
+        "codex_plus/fallback"
+      ]
+    },
+    "writing": {
+      "primary": "codex_plus/default",
+      "fallbacks": [
+        "codex_plus/fallback"
+      ]
+    },
+    "review": {
+      "primary": "codex_plus/default",
+      "fallbacks": [
+        "codex_plus/fallback"
+      ]
+    },
+    "reasoning": {
+      "primary": "codex_plus/reasoning",
+      "fallbacks": [
+        "codex_plus/default",
+        "codex_plus/fallback"
+      ]
+    },
+    "polish": {
+      "primary": "codex_plus/default",
+      "fallbacks": [
+        "codex_plus/fallback"
+      ]
+    }
+  },
+  "modelAliases": {}
+}

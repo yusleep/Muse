@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+runs/
+*.Zone.Identifier
+.env
