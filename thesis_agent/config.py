@@ -18,6 +18,7 @@ class Settings:
     semantic_scholar_api_key: str | None
     openalex_email: str | None
     crossref_mailto: str | None
+    refs_dir: str | None  # Resolved absolute path to local reference files, or None
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -42,6 +43,15 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     llm_base_url = source.get("THESIS_AGENT_LLM_BASE_URL", "https://api.openai.com/v1").strip()
     runs_dir = source.get("THESIS_AGENT_RUNS_DIR", "runs").strip() or "runs"
 
+    # Resolve local refs directory: CLI/env var takes precedence, then auto-detect ./refs/
+    refs_dir_raw = source.get("THESIS_AGENT_REFS_DIR", "").strip() or None
+    if refs_dir_raw:
+        resolved = os.path.abspath(refs_dir_raw)
+        refs_dir: str | None = resolved if os.path.isdir(resolved) else None
+    else:
+        candidate = os.path.abspath("refs")
+        refs_dir = candidate if os.path.isdir(candidate) else None
+
     return Settings(
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
@@ -51,6 +61,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         semantic_scholar_api_key=source.get("THESIS_AGENT_SEMANTIC_SCHOLAR_API_KEY", "").strip() or None,
         openalex_email=source.get("THESIS_AGENT_OPENALEX_EMAIL", "").strip() or None,
         crossref_mailto=source.get("THESIS_AGENT_CROSSREF_MAILTO", "").strip() or None,
+        refs_dir=refs_dir,
     )
 
 

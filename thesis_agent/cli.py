@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--language", default="zh")
     run.add_argument("--format-standard", default="GB/T 7714-2015")
     run.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
+    run.add_argument("--refs-dir", default=None, help="Local reference files directory (overrides auto-detection)")
     run.add_argument("--auto-approve", action="store_true", help="Skip HITL pauses")
     run.set_defaults(func=cmd_run)
 
@@ -35,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--start-stage", type=int, default=0)
     resume.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
+    resume.add_argument("--refs-dir", default=None, help="Local reference files directory (overrides auto-detection)")
     resume.add_argument("--auto-approve", action="store_true")
     resume.set_defaults(func=cmd_resume)
 
@@ -71,6 +73,13 @@ def cmd_debug_llm(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     settings = load_settings()
+    # CLI --refs-dir overrides env var / auto-detection
+    if getattr(args, "refs_dir", None):
+        import os
+        import dataclasses
+        resolved = os.path.abspath(args.refs_dir)
+        refs_dir = resolved if os.path.isdir(resolved) else None
+        settings = dataclasses.replace(settings, refs_dir=refs_dir)
     runtime = Runtime(settings)
     run_id = runtime.store.create_run(topic=args.topic)
 
@@ -93,6 +102,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_resume(args: argparse.Namespace) -> int:
     settings = load_settings()
+    # CLI --refs-dir overrides env var / auto-detection
+    if getattr(args, "refs_dir", None):
+        import os
+        import dataclasses
+        resolved = os.path.abspath(args.refs_dir)
+        refs_dir = resolved if os.path.isdir(resolved) else None
+        settings = dataclasses.replace(settings, refs_dir=refs_dir)
     runtime = Runtime(settings)
 
     state = runtime.store.load_state(args.run_id)
