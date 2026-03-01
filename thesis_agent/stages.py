@@ -17,33 +17,114 @@ from .orchestrator import gate_export
 from .planning import plan_subtasks
 
 
-def stage1_literature(state: dict[str, Any], search_client: Any) -> str:
+def _generate_search_queries(llm_client: Any, topic: str, discipline: str, count: int = 7) -> list[str]:
+    """Ask the LLM to generate diverse academic search queries for the topic."""
+    system = (
+        f"Generate {count} diverse English academic search queries for the given research topic. "
+        "Cover: core concepts, methodology, sub-topics, related fields, and key debates. "
+        "Return JSON with key: queries (list of strings)."
+    )
+    user = json.dumps({"topic": topic, "discipline": discipline}, ensure_ascii=False)
+    try:
+        out = llm_client.structured(system=system, user=user, route="outline", max_tokens=500)
+        queries = out.get("queries", []) if isinstance(out, dict) else []
+        if isinstance(queries, list) and queries:
+            return [str(q).strip() for q in queries if str(q).strip()][:count]
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def stage1_literature(
+    state: dict[str, Any],
+    search_client: Any,
+    llm_client: Any = None,
+    local_refs: list[dict[str, Any]] | None = None,
+) -> str:
     _log("Stage 1: searching literature sources...")
+
+    extra_queries: list[str] | None = None
+    if llm_client is not None:
+        extra_queries = _generate_search_queries(
+            llm_client, state["topic"], state.get("discipline", "")
+        ) or None
+
     references, queries = search_client.search_multi_source(
         topic=state["topic"],
         discipline=state.get("discipline", ""),
+        extra_queries=extra_queries,
     )
+
+    # Prepend local refs (higher priority) and deduplicate by ref_id
+    if local_refs:
+        seen_ids = {r["ref_id"] for r in local_refs}
+        online_deduped = [r for r in references if r.get("ref_id") not in seen_ids]
+        references = local_refs + online_deduped
+        _log(f"Stage 1: {len(local_refs)} local + {len(online_deduped)} online references")
+    else:
+        _log(f"Stage 1: {len(references)} online references")
 
     state["search_queries"] = queries
     state["references"] = references
     state["literature_summary"] = _summarize_references(references)
     state["stage1_status"] = "hitl_review"
     state["current_stage"] = 1
-    _log(f"Stage 1 done: {len(references)} references found")
+    _log(f"Stage 1 done: {len(references)} references total")
     return "hitl"
+
+
+def _analyze_topic(
+    llm_client: Any, topic: str, discipline: str, literature_summary: str
+) -> dict[str, Any]:
+    """Pre-analyze the topic to surface research gaps and domain context."""
+    system = (
+        "Analyze this research topic and return JSON with keys: "
+        "research_gaps (list), core_concepts (list), methodology_domain (string), "
+        "suggested_contributions (list). "
+        "Be specific to the discipline."
+    )
+    user = json.dumps(
+        {"topic": topic, "discipline": discipline, "literature_summary": literature_summary},
+        ensure_ascii=False,
+    )
+    try:
+        out = llm_client.structured(system=system, user=user, route="outline", max_tokens=800)
+        if isinstance(out, dict) and out.get("research_gaps"):
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "research_gaps": [],
+        "core_concepts": [],
+        "methodology_domain": "general",
+        "suggested_contributions": [],
+    }
 
 
 def stage2_outline(state: dict[str, Any], llm_client: Any) -> str:
     _log("Stage 2: generating outline...")
+
+    topic_analysis = _analyze_topic(
+        llm_client,
+        state["topic"],
+        state.get("discipline", ""),
+        state.get("literature_summary", ""),
+    )
+    _log(f"Stage 2: topic analysis done, methodology_domain={topic_analysis.get('methodology_domain')}")
+
     prompt = (
         "Generate a thesis outline as JSON with keys: chapters (list). Each chapter must include "
-        "chapter_id, chapter_title, target_words, complexity, subsections (list of {title})."
+        "chapter_id, chapter_title, target_words, complexity, subsections (list of {title}). "
+        "Use the topic_analysis to create a discipline-specific, non-generic structure. "
+        "For CS/systems topics include: background, related work, system design, evaluation, conclusion. "
+        "For social science topics include: literature review, theory, methods, findings, discussion."
     )
     context = {
         "topic": state["topic"],
         "discipline": state.get("discipline", ""),
         "language": state.get("language", "zh"),
         "literature_summary": state.get("literature_summary", ""),
+        "topic_analysis": topic_analysis,
     }
 
     result = llm_client.structured(
@@ -80,7 +161,7 @@ def stage2_outline(state: dict[str, Any], llm_client: Any) -> str:
     return "hitl"
 
 
-def stage3_write(state: dict[str, Any], llm_client: Any) -> str:
+def stage3_write(state: dict[str, Any], llm_client: Any, rag_index: Any = None) -> str:
     total_chapters = len(state.get("chapter_plans", []))
     _log(f"Stage 3: writing {total_chapters} chapters...")
     chapter_results = []
@@ -104,6 +185,7 @@ def stage3_write(state: dict[str, Any], llm_client: Any) -> str:
                 subtask_plan=subtask_plan,
                 revision_instructions=revision_instructions,
                 previous=subtask_results,
+                rag_index=rag_index,
             )
 
             merged = "\n\n".join(item["output_text"] for item in subtask_results)
@@ -190,29 +272,50 @@ def stage4_verify(state: dict[str, Any], metadata_client: Any, llm_client: Any) 
 
 
 def stage5_polish(state: dict[str, Any], llm_client: Any) -> str:
-    _log("Stage 5: polishing full text...")
-    full_text = "\n\n".join(ch.get("merged_text", "") for ch in state.get("chapter_results", []))
+    _log("Stage 5: polishing chapters...")
+    chapter_results = state.get("chapter_results", [])
+    polished_chapters: list[str] = []
+    all_notes: list[str] = []
 
     system = (
-        "Polish the academic thesis text for consistency and clarity. "
+        "Polish the academic thesis chapter for consistency and clarity. "
         "Do not alter core claims. Return JSON with keys: final_text, polish_notes (list)."
     )
-    user = json.dumps(
-        {
-            "language": state.get("language", "zh"),
-            "format_standard": state.get("format_standard", "GB/T 7714-2015"),
-            "text": full_text,
-        },
-        ensure_ascii=False,
-    )
-    out = llm_client.structured(system=system, user=user, route="polish", max_tokens=4500)
-    polished = out.get("final_text") if isinstance(out, dict) else None
 
-    state["final_text"] = polished if isinstance(polished, str) and polished.strip() else full_text
-    notes = out.get("polish_notes", []) if isinstance(out, dict) else []
-    state["polish_notes"] = notes if isinstance(notes, list) else []
+    for ch in chapter_results:
+        chapter_title = ch.get("chapter_title", "")
+        chapter_text = ch.get("merged_text", "")
+        if not chapter_text.strip():
+            polished_chapters.append(chapter_text)
+            continue
+
+        user = json.dumps(
+            {
+                "language": state.get("language", "zh"),
+                "format_standard": state.get("format_standard", "GB/T 7714-2015"),
+                "chapter_title": chapter_title,
+                "text": chapter_text,
+            },
+            ensure_ascii=False,
+        )
+        try:
+            out = llm_client.structured(system=system, user=user, route="polish", max_tokens=4500)
+            polished = out.get("final_text") if isinstance(out, dict) else None
+            notes = out.get("polish_notes", []) if isinstance(out, dict) else []
+            if isinstance(polished, str) and polished.strip():
+                polished_chapters.append(polished)
+            else:
+                polished_chapters.append(chapter_text)
+            if isinstance(notes, list):
+                all_notes.extend(f"[{chapter_title}] {n}" for n in notes)
+        except Exception:  # noqa: BLE001
+            polished_chapters.append(chapter_text)
+
+    state["final_text"] = "\n\n".join(polished_chapters)
+    state["polish_notes"] = all_notes
     state["stage5_status"] = "hitl_review"
     state["current_stage"] = 5
+    _log(f"Stage 5 done: polished {len(polished_chapters)} chapters")
     return "hitl"
 
 
@@ -265,6 +368,7 @@ def _write_subtasks(
     subtask_plan: list[dict[str, Any]],
     revision_instructions: dict[str, str],
     previous: list[dict[str, Any]],
+    rag_index: Any = None,
 ) -> list[dict[str, Any]]:
     results = []
     prev_text = ""
@@ -281,33 +385,49 @@ def _write_subtasks(
         # Build a compact snapshot of available references so the LLM can
         # cite using the actual ref_id keys stored in the reference index.
         refs_snapshot = [
-            {"ref_id": r["ref_id"], "title": r.get("title", ""), "year": r.get("year")}
+            {
+                "ref_id": r["ref_id"],
+                "title": r.get("title", ""),
+                "year": r.get("year"),
+                "abstract": (r.get("abstract") or "")[:300],
+            }
             for r in state.get("references", [])
             if isinstance(r, dict) and r.get("ref_id")
         ][:30]
+
+        # RAG: retrieve locally-indexed chunks relevant to this subtask
+        local_context: list[dict[str, Any]] = []
+        if rag_index is not None:
+            query = f"{chapter_title} {subtask.get('title', '')} {state.get('topic', '')}"
+            try:
+                local_context = rag_index.retrieve(query, top_k=5)
+            except Exception:  # noqa: BLE001
+                local_context = []
 
         system = (
             "Write one thesis subsection with citations. "
             "IMPORTANT: for citations_used, use ONLY ref_id values from the available_references list. "
             "Do not invent citation keys not in that list. "
+            "Include specific technical details, mathematical notation where appropriate, "
+            "and reference concrete experimental results. "
             "Return JSON with keys: "
             "text, citations_used (list of ref_id strings), key_claims (list), transition_out, "
             "glossary_additions (object), "
             "self_assessment (object with confidence, weak_spots, needs_revision)."
         )
-        user = json.dumps(
-            {
-                "topic": state.get("topic", ""),
-                "chapter_title": chapter_title,
-                "subtask": subtask,
-                "language": state.get("language", "zh"),
-                "available_references": refs_snapshot,
-                "allowed_refs": [r["ref_id"] for r in refs_snapshot],
-                "previous_subsection": prev_text,
-                "revision_instruction": revision_instructions.get(sid),
-            },
-            ensure_ascii=False,
-        )
+        user_payload: dict[str, Any] = {
+            "topic": state.get("topic", ""),
+            "chapter_title": chapter_title,
+            "subtask": subtask,
+            "language": state.get("language", "zh"),
+            "available_references": refs_snapshot,
+            "allowed_refs": [r["ref_id"] for r in refs_snapshot],
+            "previous_subsection": prev_text,
+            "revision_instruction": revision_instructions.get(sid),
+        }
+        if local_context:
+            user_payload["local_context"] = local_context
+        user = json.dumps(user_payload, ensure_ascii=False)
 
         out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
         text = str(out.get("text", "")).strip()

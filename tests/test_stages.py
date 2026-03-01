@@ -8,7 +8,7 @@ from thesis_agent.store import RunStore
 
 
 class _FakeSearchClient:
-    def search_multi_source(self, topic: str, discipline: str):
+    def search_multi_source(self, topic: str, discipline: str, extra_queries=None):
         return [
             {
                 "ref_id": "@paper1",

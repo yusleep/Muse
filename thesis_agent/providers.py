@@ -564,12 +564,17 @@ class AcademicSearchClient:
     semantic_scholar_api_key: str | None = None
     openalex_email: str | None = None
 
-    def search_multi_source(self, topic: str, discipline: str) -> tuple[list[dict[str, Any]], list[str]]:
-        queries = [
-            topic,
-            f"{topic} {discipline}",
-            f"{topic} methodology",
-        ]
+    def search_multi_source(
+        self, topic: str, discipline: str, extra_queries: list[str] | None = None
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        if extra_queries:
+            queries = extra_queries  # LLM-generated queries replace the 3 defaults
+        else:
+            queries = [
+                topic,
+                f"{topic} {discipline}",
+                f"{topic} methodology",
+            ]
 
         papers: list[dict[str, Any]] = []
         for q in queries:

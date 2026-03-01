@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any
 
 from .audit import JsonlAuditSink, build_event
@@ -18,6 +19,10 @@ from .stages import (
     stage6_export,
 )
 from .store import RunStore
+
+
+def _warn(msg: str) -> None:
+    print(f"[thesis-agent] WARNING: {msg}", file=sys.stderr, flush=True)
 
 
 class Runtime:
@@ -47,9 +52,36 @@ class Runtime:
             crossref_mailto=settings.crossref_mailto,
         )
 
+        self.local_refs: list[dict[str, Any]] = []
+        self.rag_index: Any = None
+        if settings.refs_dir:
+            self._init_local_refs(settings.refs_dir)
+
+    def _init_local_refs(self, refs_dir: str) -> None:
+        """Load local reference files and build RAG index (failures only warn)."""
+        try:
+            from .refs_loader import load_local_refs
+            self.local_refs = load_local_refs(refs_dir)
+            print(f"[thesis-agent] Loaded {len(self.local_refs)} local reference(s) from {refs_dir}", file=sys.stderr, flush=True)
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"Failed to load local refs from {refs_dir!r}: {exc}")
+            self.local_refs = []
+
+        if self.local_refs:
+            try:
+                from .rag import RagIndex
+                self.rag_index = RagIndex.build(self.local_refs, refs_dir)
+                print(f"[thesis-agent] RAG index built ({len(self.local_refs)} refs)", file=sys.stderr, flush=True)
+            except Exception as exc:  # noqa: BLE001
+                _warn(f"Failed to build RAG index: {exc}")
+                self.rag_index = None
+
     def build_engine(self, run_id: str, output_format: str) -> ThesisEngine:
         audit_path = self.store.artifact_path(run_id, "audit.jsonl")
         audit_sink = JsonlAuditSink(audit_path)
+
+        local_refs = self.local_refs or None
+        rag_index = self.rag_index
 
         def _audit(stage: int, event_type: str, input_summary: str = "", output_summary: str = "") -> None:
             event = build_event(
@@ -67,7 +99,11 @@ class Runtime:
 
         def s1(ctx: Any) -> str:
             _audit(1, "stage_start", input_summary=ctx.state.get("topic", ""))
-            result = stage1_literature(ctx.state, self.search)
+            result = stage1_literature(
+                ctx.state, self.search, llm_client=self.llm, local_refs=local_refs
+            )
+            ctx.state["local_refs_count"] = len(self.local_refs)
+            ctx.state["rag_enabled"] = rag_index is not None
             _audit(1, "stage_end", output_summary=f"references={len(ctx.state.get('references', []))}")
             return result
 
@@ -79,7 +115,7 @@ class Runtime:
 
         def s3(ctx: Any) -> str:
             _audit(3, "stage_start")
-            result = stage3_write(ctx.state, self.llm)
+            result = stage3_write(ctx.state, self.llm, rag_index=rag_index)
             _audit(3, "stage_end", output_summary=f"chapter_results={len(ctx.state.get('chapter_results', []))}")
             return result
 

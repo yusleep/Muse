@@ -54,6 +54,8 @@ class ThesisState(TypedDict):
     final_text: str
     output_format: str
     output_filepath: str
+    local_refs_count: int  # Number of local reference files ingested
+    rag_enabled: bool  # True if RAG index was successfully built
     stage1_status: str
     stage2_status: str
     stage3_status: str
@@ -111,6 +113,8 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "final_text": "",
     "output_format": "markdown",
     "output_filepath": "",
+    "local_refs_count": 0,
+    "rag_enabled": False,
     "stage1_status": "pending",
     "stage2_status": "pending",
     "stage3_status": "pending",
