@@ -6,3 +6,5 @@ __pycache__/
 runs/
 *.Zone.Identifier
 .env
+.worktrees/
+refs/.index/
