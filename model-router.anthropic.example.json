@@ -1,0 +1,54 @@
+{
+  "auth": {
+    "profiles": {
+      "anthropic_api_key": {
+        "apiKeyEnv": "ANTHROPIC_API_KEY"
+      }
+    }
+  },
+  "providers": {
+    "anthropic": {
+      "baseUrl": "https://api.anthropic.com",
+      "apiStyle": "anthropic",
+      "auth": "anthropic_api_key",
+      "models": {
+        "anthropic/opus": {
+          "model": "claude-opus-4-6"
+        },
+        "anthropic/sonnet": {
+          "model": "claude-sonnet-4-6"
+        },
+        "anthropic/haiku": {
+          "model": "claude-haiku-4-5-20251001"
+        }
+      }
+    }
+  },
+  "models": {
+    "default": {
+      "primary": "anthropic/opus",
+      "fallbacks": ["anthropic/sonnet"]
+    },
+    "outline": {
+      "primary": "anthropic/opus",
+      "fallbacks": ["anthropic/sonnet"]
+    },
+    "writing": {
+      "primary": "anthropic/opus",
+      "fallbacks": ["anthropic/sonnet"]
+    },
+    "review": {
+      "primary": "anthropic/sonnet",
+      "fallbacks": ["anthropic/haiku"]
+    },
+    "reasoning": {
+      "primary": "anthropic/opus",
+      "fallbacks": ["anthropic/sonnet"]
+    },
+    "polish": {
+      "primary": "anthropic/sonnet",
+      "fallbacks": ["anthropic/haiku"]
+    }
+  },
+  "modelAliases": {}
+}
