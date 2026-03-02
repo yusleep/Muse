@@ -289,6 +289,12 @@ class _ModelRouter:
                 headers.setdefault("OpenAI-Beta", "responses=experimental")
                 headers.setdefault("originator", "codex_cli_rs")
                 headers.setdefault("accept", "application/json")
+
+            if api_style == "anthropic":
+                _pop_header_case_insensitive(headers, "Authorization")
+                if api_key:
+                    headers["x-api-key"] = api_key
+                headers.setdefault("anthropic-version", "2023-06-01")
             header_candidates.append(headers)
 
         if not header_candidates:
@@ -524,7 +530,7 @@ class LLMClient:
                     "api_style": attempt.api_style,
                     "profile_index": profile_idx,
                     "model": attempt.model_name,
-                    "authorization_present": "Authorization" in headers,
+                    "authorization_present": "Authorization" in headers or "x-api-key" in headers,
                     "header_keys": sorted(headers.keys()),
                 }
                 try:
@@ -751,6 +757,8 @@ def _split_model_id(model_id: str) -> tuple[str, str]:
 def _to_provider_endpoint(base_url: str, *, api_style: str, codex_oauth: bool) -> str:
     if api_style == "responses":
         return _to_responses_url(base_url, codex_oauth=codex_oauth)
+    if api_style == "anthropic":
+        return _to_anthropic_url(base_url)
     return _to_chat_completions_url(base_url)
 
 
@@ -761,6 +769,15 @@ def _to_chat_completions_url(base_url: str) -> str:
     if normalized.endswith("/v1"):
         return normalized + "/chat/completions"
     return normalized + "/chat/completions"
+
+
+def _to_anthropic_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized.endswith("/v1/messages"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return normalized + "/messages"
+    return normalized + "/v1/messages"
 
 
 def _to_responses_url(base_url: str, *, codex_oauth: bool) -> str:
@@ -792,6 +809,8 @@ def _resolve_api_style(provider_cfg: Mapping[str, Any], *, codex_oauth: bool) ->
         return "responses"
     if raw in {"chat", "chat_completions", "chat-completions"}:
         return "chat_completions"
+    if raw in {"anthropic", "claude", "anthropic_messages"}:
+        return "anthropic"
     if codex_oauth:
         return "responses"
     return "chat_completions"
@@ -903,6 +922,21 @@ def _build_request_payload(
             payload["text"] = text_cfg
         return payload
 
+    if attempt.api_style == "anthropic":
+        payload = {
+            "model": attempt.model_name,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+        payload.update(attempt.params)
+        payload["model"] = attempt.model_name
+        payload["max_tokens"] = max_tokens
+        payload["system"] = system
+        payload["messages"] = [{"role": "user", "content": user}]
+        return payload
+
     payload = {
         "model": attempt.model_name,
         "messages": [
@@ -922,6 +956,17 @@ def _build_request_payload(
 
 
 def _extract_llm_message(result: Mapping[str, Any]) -> str:
+    # Anthropic Messages API: {"type": "message", "content": [{"type": "text", "text": "..."}]}
+    if result.get("type") == "message":
+        content_list = result.get("content")
+        if isinstance(content_list, list):
+            for block in content_list:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = block.get("text", "")
+                    if isinstance(text, str) and text.strip():
+                        return text
+        raise ProviderError("Anthropic response has no text content blocks")
+
     choices = result.get("choices")
     if isinstance(choices, list) and choices:
         first = choices[0]
