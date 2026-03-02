@@ -792,6 +792,8 @@ def _resolve_api_style(provider_cfg: Mapping[str, Any], *, codex_oauth: bool) ->
         return "responses"
     if raw in {"chat", "chat_completions", "chat-completions"}:
         return "chat_completions"
+    if raw in {"anthropic", "claude", "anthropic_messages"}:
+        return "anthropic"
     if codex_oauth:
         return "responses"
     return "chat_completions"
