@@ -289,6 +289,12 @@ class _ModelRouter:
                 headers.setdefault("OpenAI-Beta", "responses=experimental")
                 headers.setdefault("originator", "codex_cli_rs")
                 headers.setdefault("accept", "application/json")
+
+            if api_style == "anthropic":
+                _pop_header_case_insensitive(headers, "Authorization")
+                if api_key:
+                    headers["x-api-key"] = api_key
+                headers.setdefault("anthropic-version", "2023-06-01")
             header_candidates.append(headers)
 
         if not header_candidates:
