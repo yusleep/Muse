@@ -922,6 +922,19 @@ def _build_request_payload(
             payload["text"] = text_cfg
         return payload
 
+    if attempt.api_style == "anthropic":
+        payload = {
+            "model": attempt.model_name,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+        payload.update(attempt.params)
+        payload["model"] = attempt.model_name
+        payload["max_tokens"] = max_tokens
+        payload["system"] = system
+        return payload
+
     payload = {
         "model": attempt.model_name,
         "messages": [
