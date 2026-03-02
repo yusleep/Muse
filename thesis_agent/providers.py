@@ -530,7 +530,7 @@ class LLMClient:
                     "api_style": attempt.api_style,
                     "profile_index": profile_idx,
                     "model": attempt.model_name,
-                    "authorization_present": "Authorization" in headers,
+                    "authorization_present": "Authorization" in headers or "x-api-key" in headers,
                     "header_keys": sorted(headers.keys()),
                 }
                 try:
@@ -926,6 +926,7 @@ def _build_request_payload(
         payload = {
             "model": attempt.model_name,
             "max_tokens": max_tokens,
+            "temperature": temperature,
             "system": system,
             "messages": [{"role": "user", "content": user}],
         }
@@ -933,6 +934,7 @@ def _build_request_payload(
         payload["model"] = attempt.model_name
         payload["max_tokens"] = max_tokens
         payload["system"] = system
+        payload["messages"] = [{"role": "user", "content": user}]
         return payload
 
     payload = {
@@ -954,14 +956,16 @@ def _build_request_payload(
 
 
 def _extract_llm_message(result: Mapping[str, Any]) -> str:
-    # Anthropic Messages API: {"content": [{"type": "text", "text": "..."}]}
-    content_list = result.get("content")
-    if isinstance(content_list, list) and content_list:
-        for block in content_list:
-            if isinstance(block, dict) and block.get("type") == "text":
-                text = block.get("text", "")
-                if isinstance(text, str) and text.strip():
-                    return text
+    # Anthropic Messages API: {"type": "message", "content": [{"type": "text", "text": "..."}]}
+    if result.get("type") == "message":
+        content_list = result.get("content")
+        if isinstance(content_list, list):
+            for block in content_list:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = block.get("text", "")
+                    if isinstance(text, str) and text.strip():
+                        return text
+        raise ProviderError("Anthropic response has no text content blocks")
 
     choices = result.get("choices")
     if isinstance(choices, list) and choices:

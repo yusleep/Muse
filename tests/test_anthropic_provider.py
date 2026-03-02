@@ -139,3 +139,33 @@ class TestAnthropicApiStyle(unittest.TestCase):
         client.structured(system="Return JSON.", user="topic", route="outline", max_tokens=500)
         payload = fake.calls[0]["payload"]
         self.assertNotIn("response_format", payload)
+
+    def test_response_with_type_message_required(self):
+        """Anthropic extraction requires type=message in response."""
+        fake = _FakeHttp({
+            "content": [{"type": "text", "text": "should not match"}],
+            "usage": {"total_tokens": 1},
+        })
+        client = _make_anthropic_client(fake)
+        # Without type=message, should fall through to other extractors (and fail)
+        with self.assertRaises(ProviderError):
+            client.text(system="sys", user="hello", route="default", max_tokens=100)
+
+    def test_empty_content_array_raises_error(self):
+        """Empty content array in Anthropic response should raise ProviderError."""
+        fake = _FakeHttp({
+            "type": "message",
+            "content": [],
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+        })
+        client = _make_anthropic_client(fake)
+        with self.assertRaises(ProviderError):
+            client.text(system="sys", user="hello", route="default", max_tokens=100)
+
+    def test_temperature_in_payload(self):
+        """Temperature must be included in the Anthropic payload."""
+        fake = _FakeHttp(self._anthropic_response())
+        client = _make_anthropic_client(fake)
+        client.text(system="sys", user="hello", route="default", max_tokens=100)
+        payload = fake.calls[0]["payload"]
+        self.assertIn("temperature", payload)
