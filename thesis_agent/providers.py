@@ -751,6 +751,8 @@ def _split_model_id(model_id: str) -> tuple[str, str]:
 def _to_provider_endpoint(base_url: str, *, api_style: str, codex_oauth: bool) -> str:
     if api_style == "responses":
         return _to_responses_url(base_url, codex_oauth=codex_oauth)
+    if api_style == "anthropic":
+        return _to_anthropic_url(base_url)
     return _to_chat_completions_url(base_url)
 
 
@@ -761,6 +763,15 @@ def _to_chat_completions_url(base_url: str) -> str:
     if normalized.endswith("/v1"):
         return normalized + "/chat/completions"
     return normalized + "/chat/completions"
+
+
+def _to_anthropic_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized.endswith("/v1/messages"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return normalized + "/messages"
+    return normalized + "/v1/messages"
 
 
 def _to_responses_url(base_url: str, *, codex_oauth: bool) -> str:
