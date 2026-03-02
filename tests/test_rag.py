@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 class TestRagIndexBm25(unittest.TestCase):
@@ -42,25 +43,25 @@ class TestRagIndexBm25(unittest.TestCase):
             self.assertEqual(idx.retrieve("anything"), [])
 
     def test_cache_is_reused(self):
+        """Second build call must load from cache, not call _build_fresh again."""
+        import thesis_agent.rag as rag_module
         from thesis_agent.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             refs = self._make_refs(2)
             # First build — creates cache files
-            idx1 = RagIndex.build(refs, tmp)
+            RagIndex.build(refs, tmp)
             cache_dir = os.path.join(tmp, ".index")
             self.assertTrue(os.path.exists(os.path.join(cache_dir, "chunks.json")))
 
-            # Second build — should load from cache
-            idx2 = RagIndex.build(refs, tmp)
-            r1 = idx1.retrieve("topic_0", top_k=1)
-            r2 = idx2.retrieve("topic_0", top_k=1)
-            # Both should return the same ref_id for the same query
-            if r1 and r2:
-                self.assertEqual(r1[0]["ref_id"], r2[0]["ref_id"])
+            # Second build — _build_fresh must NOT be called (cache valid)
+            with patch.object(rag_module, "_build_fresh", wraps=rag_module._build_fresh) as mock_bf:
+                RagIndex.build(refs, tmp)
+                mock_bf.assert_not_called()
 
     def test_cache_invalidated_on_content_change(self):
         """If source file mtimes change, cache should be rebuilt."""
+        import thesis_agent.rag as rag_module
         from thesis_agent.rag import RagIndex, _cache_valid
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,13 +77,20 @@ class TestRagIndexBm25(unittest.TestCase):
                     "filepath": fpath,
                 }
             ]
-            idx = RagIndex.build(refs, tmp)
+            RagIndex.build(refs, tmp)
             meta_path = os.path.join(tmp, ".index", "index_meta.json")
             meta = json.loads(open(meta_path).read())
 
             # Simulate mtime change by altering stored meta
             meta["source_mtimes"][fpath] = 0.0
             self.assertFalse(_cache_valid(meta, refs))
+
+            # Verify rebuild is triggered when mtime differs
+            with patch.object(rag_module, "_build_fresh", wraps=rag_module._build_fresh) as mock_bf:
+                # Patch _cache_valid to return False so build path is exercised
+                with patch.object(rag_module, "_cache_valid", return_value=False):
+                    RagIndex.build(refs, tmp)
+                mock_bf.assert_called_once()
 
     def test_top_k_respected(self):
         from thesis_agent.rag import RagIndex
@@ -92,6 +100,54 @@ class TestRagIndexBm25(unittest.TestCase):
             idx = RagIndex.build(refs, tmp)
             results = idx.retrieve("methodology", top_k=3)
             self.assertLessEqual(len(results), 3)
+
+    def test_use_embedding_false_when_chunks_empty(self):
+        """use_embedding should be False when there are no chunks to embed."""
+        from thesis_agent.rag import RagIndex
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Refs with no text → no chunks → use_embedding must be False in meta
+            refs = [{"ref_id": "@r0", "full_text": "", "filepath": None}]
+            RagIndex.build(refs, tmp)
+            meta_path = os.path.join(tmp, ".index", "index_meta.json")
+            meta = json.loads(open(meta_path).read())
+            self.assertFalse(meta["use_embedding"])
+
+
+class TestRagIndexEmbedding(unittest.TestCase):
+    """Test the embedding retrieval path using a fake model injected into _model_cache."""
+
+    def test_retrieve_embedding_path(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+
+        from thesis_agent.rag import RagIndex, _model_cache, _MODEL_NAME
+
+        chunks = [
+            {"ref_id": "@r0", "text": "deep learning neural network"},
+            {"ref_id": "@r1", "text": "Byzantine fault tolerance consensus"},
+        ]
+        # 2-dim unit embeddings: r0 → [1, 0], r1 → [0, 1]
+        embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+
+        class _FakeModel:
+            def encode(self, texts, normalize_embeddings=True):
+                # Query vector closest to r1
+                return np.array([[0.01, 0.99]], dtype=np.float32)
+
+        _model_cache[_MODEL_NAME] = _FakeModel()
+        try:
+            idx = RagIndex(chunks=chunks, embeddings=embeddings, use_embedding=True)
+            results = idx.retrieve("Byzantine consensus", top_k=1)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]["ref_id"], "@r1")
+            self.assertIn("text", results[0])
+            self.assertIn("score", results[0])
+            self.assertAlmostEqual(results[0]["score"], 0.99, places=2)
+        finally:
+            _model_cache.pop(_MODEL_NAME, None)
 
 
 class TestChunking(unittest.TestCase):

@@ -28,6 +28,17 @@ _CHUNKS_FILE = "chunks.json"
 _META_FILE = "index_meta.json"
 _MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
+# Module-level model cache so the heavy SentenceTransformer is loaded at most once.
+_model_cache: dict[str, Any] = {}
+
+
+def _get_model(model_name: str) -> Any:
+    """Return a cached SentenceTransformer instance, loading it on first use."""
+    if model_name not in _model_cache:
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        _model_cache[model_name] = SentenceTransformer(model_name)
+    return _model_cache[model_name]
+
 
 # ---------------------------------------------------------------------------
 # Chunking
@@ -119,8 +130,7 @@ class RagIndex:
 
     def _retrieve_embedding(self, query: str, top_k: int) -> list[dict[str, Any]]:
         import numpy as np
-        from sentence_transformers import SentenceTransformer  # type: ignore
-        model = SentenceTransformer(_MODEL_NAME)
+        model = _get_model(_MODEL_NAME)
         q_emb = model.encode([query], normalize_embeddings=True)
         scores = (self._embeddings @ q_emb.T).flatten()
         top_idx = np.argsort(scores)[::-1][:top_k]
@@ -157,7 +167,7 @@ def _mtime(filepath: str | None) -> float:
 def _cache_valid(meta: dict[str, Any], refs: list[dict[str, Any]]) -> bool:
     stored: dict[str, float] = meta.get("source_mtimes", {})
     current = {
-        ref.get("filepath", ref["ref_id"]): _mtime(ref.get("filepath"))
+        (ref.get("filepath") or ref["ref_id"]): _mtime(ref.get("filepath"))
         for ref in refs
     }
     return stored == current
@@ -178,16 +188,15 @@ def _build_fresh(refs: list[dict[str, Any]], index_dir: Path) -> RagIndex:
 
     try:
         import numpy as np
-        from sentence_transformers import SentenceTransformer  # type: ignore
+        model = _get_model(_MODEL_NAME)
         if all_chunks:
-            model = SentenceTransformer(_MODEL_NAME)
             embeddings = model.encode(
                 [c["text"] for c in all_chunks],
                 normalize_embeddings=True,
                 show_progress_bar=False,
             )
             np.save(str(index_dir / _EMBEDDINGS_FILE), embeddings)
-        use_embedding = True
+            use_embedding = True
     except ImportError:
         pass  # fall back to BM25
 
@@ -199,7 +208,7 @@ def _build_fresh(refs: list[dict[str, Any]], index_dir: Path) -> RagIndex:
         "built_at": time.time(),
         "use_embedding": use_embedding,
         "source_mtimes": {
-            ref.get("filepath", ref["ref_id"]): _mtime(ref.get("filepath"))
+            (ref.get("filepath") or ref["ref_id"]): _mtime(ref.get("filepath"))
             for ref in refs
         },
     }

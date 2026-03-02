@@ -89,7 +89,7 @@ def _analyze_topic(
     )
     try:
         out = llm_client.structured(system=system, user=user, route="outline", max_tokens=800)
-        if isinstance(out, dict) and out.get("research_gaps"):
+        if isinstance(out, dict) and "research_gaps" in out:
             return out
     except Exception:  # noqa: BLE001
         pass

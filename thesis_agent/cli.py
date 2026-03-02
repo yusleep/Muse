@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
+import os
 from typing import Any
 
 from .config import load_settings
@@ -74,12 +76,9 @@ def cmd_debug_llm(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     settings = load_settings()
     # CLI --refs-dir overrides env var / auto-detection
-    if getattr(args, "refs_dir", None):
-        import os
-        import dataclasses
+    if args.refs_dir:
         resolved = os.path.abspath(args.refs_dir)
-        refs_dir = resolved if os.path.isdir(resolved) else None
-        settings = dataclasses.replace(settings, refs_dir=refs_dir)
+        settings = dataclasses.replace(settings, refs_dir=resolved if os.path.isdir(resolved) else None)
     runtime = Runtime(settings)
     run_id = runtime.store.create_run(topic=args.topic)
 
@@ -103,12 +102,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_resume(args: argparse.Namespace) -> int:
     settings = load_settings()
     # CLI --refs-dir overrides env var / auto-detection
-    if getattr(args, "refs_dir", None):
-        import os
-        import dataclasses
+    if args.refs_dir:
         resolved = os.path.abspath(args.refs_dir)
-        refs_dir = resolved if os.path.isdir(resolved) else None
-        settings = dataclasses.replace(settings, refs_dir=refs_dir)
+        settings = dataclasses.replace(settings, refs_dir=resolved if os.path.isdir(resolved) else None)
     runtime = Runtime(settings)
 
     state = runtime.store.load_state(args.run_id)

@@ -9,6 +9,7 @@ from thesis_agent.schemas import new_thesis_state
 from thesis_agent.stages import (
     _generate_search_queries,
     stage1_literature,
+    stage2_outline,
     stage5_polish,
 )
 
@@ -292,3 +293,100 @@ class TestStage5PerChapterPolish(unittest.TestCase):
         stage5_polish(state, llm)
         # LLM should not have been called for empty chapter
         llm.structured.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 topic analysis tests
+# ---------------------------------------------------------------------------
+
+class TestStage2TopicAnalysis(unittest.TestCase):
+    """Verify that _analyze_topic output is injected into the outline prompt context."""
+
+    def _make_dual_llm(self):
+        """LLM that handles both topic-analysis and outline calls."""
+        received = []
+
+        class _DualLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                payload = json.loads(user)
+                received.append(payload)
+                if "Analyze" in system:
+                    return {
+                        "research_gaps": ["gap1"],
+                        "core_concepts": ["BFT"],
+                        "methodology_domain": "systems",
+                        "suggested_contributions": ["contrib1"],
+                    }
+                # outline call
+                return {
+                    "chapters": [
+                        {
+                            "chapter_id": "ch_01",
+                            "chapter_title": "Introduction",
+                            "target_words": 2000,
+                            "complexity": "low",
+                            "subsections": [{"title": "Background"}],
+                        }
+                    ]
+                }
+
+        return _DualLLM(), received
+
+    def test_topic_analysis_present_in_outline_context(self):
+        llm, received = self._make_dual_llm()
+        state = _make_state()
+        state["literature_summary"] = "Some literature."
+
+        stage2_outline(state, llm)
+
+        # The outline call payload should contain topic_analysis
+        outline_calls = [c for c in received if "topic_analysis" in c]
+        self.assertTrue(len(outline_calls) > 0, "No outline call with topic_analysis found")
+        ta = outline_calls[0]["topic_analysis"]
+        self.assertIn("research_gaps", ta)
+        self.assertIn("methodology_domain", ta)
+        self.assertEqual(ta["methodology_domain"], "systems")
+
+    def test_topic_analysis_failure_uses_safe_defaults(self):
+        """If _analyze_topic LLM call fails, outline still proceeds."""
+
+        class _FailingAnalyzeLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                if "Analyze" in system:
+                    raise RuntimeError("LLM down")
+                return {
+                    "chapters": [
+                        {
+                            "chapter_id": "ch_01",
+                            "chapter_title": "Introduction",
+                            "target_words": 2000,
+                            "complexity": "low",
+                            "subsections": [],
+                        }
+                    ]
+                }
+
+        state = _make_state()
+        state["literature_summary"] = "Some literature."
+        # Should not raise even if topic analysis fails
+        result = stage2_outline(state, _FailingAnalyzeLLM())
+        self.assertEqual(result, "hitl")
+        self.assertTrue(len(state["chapter_plans"]) > 0)
+
+    def test_analyze_topic_returns_default_when_research_gaps_empty(self):
+        """LLM returning empty research_gaps list should still be accepted (not fall back)."""
+        from thesis_agent.stages import _analyze_topic
+
+        class _EmptyGapsLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                return {
+                    "research_gaps": [],
+                    "core_concepts": ["BFT"],
+                    "methodology_domain": "systems",
+                    "suggested_contributions": [],
+                }
+
+        result = _analyze_topic(_EmptyGapsLLM(), "BFT", "CS", "summary")
+        # research_gaps key is present → should return the dict, not the default
+        self.assertEqual(result["methodology_domain"], "systems")
+        self.assertEqual(result["core_concepts"], ["BFT"])

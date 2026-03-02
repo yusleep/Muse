@@ -21,6 +21,10 @@ from .stages import (
 from .store import RunStore
 
 
+def _log(msg: str) -> None:
+    print(f"[thesis-agent] {msg}", file=sys.stderr, flush=True)
+
+
 def _warn(msg: str) -> None:
     print(f"[thesis-agent] WARNING: {msg}", file=sys.stderr, flush=True)
 
@@ -62,7 +66,7 @@ class Runtime:
         try:
             from .refs_loader import load_local_refs
             self.local_refs = load_local_refs(refs_dir)
-            print(f"[thesis-agent] Loaded {len(self.local_refs)} local reference(s) from {refs_dir}", file=sys.stderr, flush=True)
+            _log(f"Loaded {len(self.local_refs)} local reference(s) from {refs_dir}")
         except Exception as exc:  # noqa: BLE001
             _warn(f"Failed to load local refs from {refs_dir!r}: {exc}")
             self.local_refs = []
@@ -71,7 +75,7 @@ class Runtime:
             try:
                 from .rag import RagIndex
                 self.rag_index = RagIndex.build(self.local_refs, refs_dir)
-                print(f"[thesis-agent] RAG index built ({len(self.local_refs)} refs)", file=sys.stderr, flush=True)
+                _log(f"RAG index built ({len(self.local_refs)} refs)")
             except Exception as exc:  # noqa: BLE001
                 _warn(f"Failed to build RAG index: {exc}")
                 self.rag_index = None

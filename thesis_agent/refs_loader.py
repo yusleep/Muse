@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -47,9 +48,8 @@ def load_local_refs(refs_dir: str) -> list[dict[str, Any]]:
             ref = _ingest_file(path)
             if ref is not None:
                 results.append(ref)
-        except Exception:  # noqa: BLE001
-            # Silently skip unreadable files so one bad file doesn't break the pipeline
-            pass
+        except Exception as exc:  # noqa: BLE001
+            print(f"[thesis-agent] WARNING: skipping {path.name}: {exc}", file=sys.stderr, flush=True)
     return results
 
 
