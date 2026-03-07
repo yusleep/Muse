@@ -1,4 +1,4 @@
-"""Runtime configuration for thesis agent."""
+"""Runtime configuration for Muse."""
 
 from __future__ import annotations
 
@@ -28,23 +28,23 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
 
     model_router_config = _load_router_config(source)
 
-    llm_api_key = source.get("THESIS_AGENT_LLM_API_KEY", "").strip()
-    llm_model = source.get("THESIS_AGENT_LLM_MODEL", "").strip()
+    llm_api_key = source.get("MUSE_LLM_API_KEY", "").strip()
+    llm_model = source.get("MUSE_LLM_MODEL", "").strip()
 
     # Backward-compatible requirement for legacy single-model mode.
     if not model_router_config:
         if not llm_api_key:
-            raise ValueError("THESIS_AGENT_LLM_API_KEY is required")
+            raise ValueError("MUSE_LLM_API_KEY is required")
         if not llm_model:
-            raise ValueError("THESIS_AGENT_LLM_MODEL is required")
+            raise ValueError("MUSE_LLM_MODEL is required")
     elif not llm_model:
         llm_model = _infer_default_model(model_router_config)
 
-    llm_base_url = source.get("THESIS_AGENT_LLM_BASE_URL", "https://api.openai.com/v1").strip()
-    runs_dir = source.get("THESIS_AGENT_RUNS_DIR", "runs").strip() or "runs"
+    llm_base_url = source.get("MUSE_LLM_BASE_URL", "https://api.openai.com/v1").strip()
+    runs_dir = source.get("MUSE_RUNS_DIR", "runs").strip() or "runs"
 
     # Resolve local refs directory: CLI/env var takes precedence, then auto-detect ./refs/
-    refs_dir_raw = source.get("THESIS_AGENT_REFS_DIR", "").strip() or None
+    refs_dir_raw = source.get("MUSE_REFS_DIR", "").strip() or None
     if refs_dir_raw:
         resolved = os.path.abspath(refs_dir_raw)
         refs_dir: str | None = resolved if os.path.isdir(resolved) else None
@@ -58,16 +58,16 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         llm_model=llm_model,
         model_router_config=model_router_config,
         runs_dir=runs_dir,
-        semantic_scholar_api_key=source.get("THESIS_AGENT_SEMANTIC_SCHOLAR_API_KEY", "").strip() or None,
-        openalex_email=source.get("THESIS_AGENT_OPENALEX_EMAIL", "").strip() or None,
-        crossref_mailto=source.get("THESIS_AGENT_CROSSREF_MAILTO", "").strip() or None,
+        semantic_scholar_api_key=source.get("MUSE_SEMANTIC_SCHOLAR_API_KEY", "").strip() or None,
+        openalex_email=source.get("MUSE_OPENALEX_EMAIL", "").strip() or None,
+        crossref_mailto=source.get("MUSE_CROSSREF_MAILTO", "").strip() or None,
         refs_dir=refs_dir,
     )
 
 
 def _load_router_config(source: Mapping[str, str]) -> dict[str, Any]:
-    raw_inline = source.get("THESIS_AGENT_MODEL_ROUTER_JSON", "").strip()
-    raw_file = source.get("THESIS_AGENT_MODEL_ROUTER_PATH", "").strip()
+    raw_inline = source.get("MUSE_MODEL_ROUTER_JSON", "").strip()
+    raw_file = source.get("MUSE_MODEL_ROUTER_PATH", "").strip()
 
     raw = raw_inline
     if not raw and raw_file:
@@ -80,10 +80,10 @@ def _load_router_config(source: Mapping[str, str]) -> dict[str, Any]:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"THESIS_AGENT_MODEL_ROUTER_JSON invalid JSON: {exc}") from exc
+        raise ValueError(f"MUSE_MODEL_ROUTER_JSON invalid JSON: {exc}") from exc
 
     if not isinstance(parsed, dict):
-        raise ValueError("THESIS_AGENT_MODEL_ROUTER_JSON must be a JSON object")
+        raise ValueError("MUSE_MODEL_ROUTER_JSON must be a JSON object")
     return parsed
 
 

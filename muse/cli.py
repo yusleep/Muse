@@ -1,4 +1,4 @@
-"""CLI entrypoint for full v3 thesis agent."""
+"""CLI entrypoint for the Muse runtime."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from .schemas import hydrate_thesis_state, new_thesis_state, validate_thesis_sta
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="thesis-agent")
+    parser = argparse.ArgumentParser(prog="muse")
     sub = parser.add_subparsers(dest="command", required=True)
 
     check = sub.add_parser("check", help="Validate provider configuration and connectivity")
@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--discipline", default="general")
     run.add_argument("--language", default="zh")
     run.add_argument("--format-standard", default="GB/T 7714-2015")
-    run.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
+    run.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf"])
     run.add_argument("--refs-dir", default=None, help="Local reference files directory (overrides auto-detection)")
     run.add_argument("--auto-approve", action="store_true", help="Skip HITL pauses")
     run.set_defaults(func=cmd_run)
@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     resume = sub.add_parser("resume", help="Resume an existing run")
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--start-stage", type=int, default=0)
-    resume.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
+    resume.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf"])
     resume.add_argument("--refs-dir", default=None, help="Local reference files directory (overrides auto-detection)")
     resume.add_argument("--auto-approve", action="store_true")
     resume.set_defaults(func=cmd_resume)
@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     export = sub.add_parser("export", help="Run export stage only")
     export.add_argument("--run-id", required=True)
-    export.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf", "docx"])
+    export.add_argument("--output-format", default="markdown", choices=["markdown", "latex", "pdf"])
     export.set_defaults(func=cmd_export)
 
     return parser
@@ -155,6 +155,8 @@ def cmd_export(args: argparse.Namespace) -> int:
             {
                 "result": result,
                 "output_filepath": latest.get("output_filepath"),
+                "export_artifacts": latest.get("export_artifacts", {}),
+                "export_warnings": latest.get("export_warnings", []),
                 "stage6_status": latest.get("stage6_status"),
             },
             ensure_ascii=False,

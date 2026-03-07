@@ -1,6 +1,6 @@
 """Tests for Anthropic api_style support in providers."""
 import unittest
-from thesis_agent.providers import HttpClient, LLMClient, ProviderError
+from muse.providers import HttpClient, LLMClient, ProviderError
 
 
 def _make_anthropic_client(fake_http, model="claude-opus-4-6"):

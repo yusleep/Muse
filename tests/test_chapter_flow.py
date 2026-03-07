@@ -1,6 +1,6 @@
 import unittest
 
-from thesis_agent.chapter import apply_chapter_review
+from muse.chapter import apply_chapter_review
 
 
 class ChapterFlowTests(unittest.TestCase):

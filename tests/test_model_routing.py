@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import base64
 
-from thesis_agent.providers import HttpClient, LLMClient, ProviderError
+from muse.providers import HttpClient, LLMClient, ProviderError
 
 
 class _FakeHttp(HttpClient):

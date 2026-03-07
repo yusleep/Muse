@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Deliver a full usable v3 thesis agent runnable from CLI with real integrations, checkpoints, audit logs, HITL, and exports.
+**Goal:** Deliver a full usable Muse v3 runtime runnable from CLI with real integrations, checkpoints, audit logs, HITL, and exports.
 
 **Architecture:** Build a Python package with stage modules, provider adapters, persistent run store, and orchestrator-driven pipeline. Expose commands via CLI for run/resume/review/check/export. Keep existing tested contracts stable while extending to full workflow.
 

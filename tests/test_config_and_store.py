@@ -2,13 +2,21 @@ import os
 import tempfile
 import unittest
 
-from thesis_agent.config import Settings, load_settings
-from thesis_agent.store import RunStore
+from muse.config import Settings, load_settings
+from muse.store import RunStore
 
 
 class SettingsTests(unittest.TestCase):
     def test_load_settings_requires_llm_api_key(self):
         env = {
+            "MUSE_LLM_MODEL": "gpt-4.1-mini",
+        }
+        with self.assertRaises(ValueError):
+            load_settings(env)
+
+    def test_load_settings_does_not_accept_legacy_prefix(self):
+        env = {
+            "THESIS_AGENT_LLM_API_KEY": "legacy-key",
             "THESIS_AGENT_LLM_MODEL": "gpt-4.1-mini",
         }
         with self.assertRaises(ValueError):
@@ -16,9 +24,9 @@ class SettingsTests(unittest.TestCase):
 
     def test_load_settings_success(self):
         env = {
-            "THESIS_AGENT_LLM_API_KEY": "test-key",
-            "THESIS_AGENT_LLM_MODEL": "gpt-4.1-mini",
-            "THESIS_AGENT_RUNS_DIR": "/tmp/runs",
+            "MUSE_LLM_API_KEY": "test-key",
+            "MUSE_LLM_MODEL": "gpt-4.1-mini",
+            "MUSE_RUNS_DIR": "/tmp/runs",
         }
 
         settings = load_settings(env)
@@ -29,14 +37,14 @@ class SettingsTests(unittest.TestCase):
 
     def test_load_settings_with_router_json_without_legacy_model_vars(self):
         env = {
-            "THESIS_AGENT_MODEL_ROUTER_JSON": """
+            "MUSE_MODEL_ROUTER_JSON": """
             {
               "auth": {"profiles": {"openai": {"apiKey": "abc"}}},
               "providers": {"openai": {"baseUrl": "https://api.openai.com/v1", "auth": "openai"}},
               "models": {"writing": {"primary": "openai/gpt-4.1-mini", "fallbacks": []}}
             }
             """,
-            "THESIS_AGENT_RUNS_DIR": "/tmp/runs",
+            "MUSE_RUNS_DIR": "/tmp/runs",
         }
 
         settings = load_settings(env)

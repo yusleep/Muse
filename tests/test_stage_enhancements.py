@@ -5,8 +5,8 @@ import json
 import unittest
 from unittest.mock import MagicMock
 
-from thesis_agent.schemas import new_thesis_state
-from thesis_agent.stages import (
+from muse.schemas import new_thesis_state
+from muse.stages import (
     _generate_search_queries,
     stage1_literature,
     stage2_outline,
@@ -172,7 +172,7 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
     """Verify that refs_snapshot built in _write_subtasks includes abstract."""
 
     def test_abstract_in_snapshot(self):
-        from thesis_agent.stages import _write_subtasks
+        from muse.stages import _write_subtasks
 
         refs = [
             {
@@ -254,7 +254,7 @@ class TestStage5PerChapterPolish(unittest.TestCase):
         state = self._make_state_with_chapters(3)
         stage5_polish(state, _CountingLLM())
 
-        self.assertEqual(call_count[0], 3)
+        self.assertEqual(call_count[0], 5)  # 3 polish + 2 abstract generation
         self.assertIn("Chapter 1", chapter_titles_received)
         self.assertIn("Chapter 2", chapter_titles_received)
         self.assertIn("Chapter 3", chapter_titles_received)
@@ -375,7 +375,7 @@ class TestStage2TopicAnalysis(unittest.TestCase):
 
     def test_analyze_topic_returns_default_when_research_gaps_empty(self):
         """LLM returning empty research_gaps list should still be accepted (not fall back)."""
-        from thesis_agent.stages import _analyze_topic
+        from muse.stages import _analyze_topic
 
         class _EmptyGapsLLM:
             def structured(self, *, system, user, route, max_tokens):

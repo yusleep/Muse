@@ -1,7 +1,7 @@
 import unittest
 
-from thesis_agent.chapter import build_revision_instructions
-from thesis_agent.schemas import hydrate_thesis_state, new_thesis_state, validate_thesis_state
+from muse.chapter import build_revision_instructions
+from muse.schemas import hydrate_thesis_state, new_thesis_state, validate_thesis_state
 
 
 class ThesisStateSchemaTests(unittest.TestCase):

@@ -9,7 +9,7 @@ from typing import Any
 
 
 def _log(msg: str) -> None:
-    print(f"[thesis-agent] {msg}", flush=True, file=sys.stderr)
+    print(f"[muse] {msg}", flush=True, file=sys.stderr)
 
 from .chapter import apply_chapter_review
 from .citation import verify_all_citations
@@ -189,7 +189,10 @@ def stage3_write(state: dict[str, Any], llm_client: Any, rag_index: Any = None) 
             )
 
             merged = "\n\n".join(item["output_text"] for item in subtask_results)
-            review = _review_chapter(llm_client=llm_client, chapter_title=chapter_title, merged_text=merged)
+            try:
+                review = _review_chapter(llm_client=llm_client, chapter_title=chapter_title, merged_text=merged)
+            except Exception:
+                review = {"scores": {}, "review_notes": []}
 
             chapter_state = {
                 "quality_scores": review.get("scores", {}),
@@ -315,11 +318,70 @@ def stage5_polish(state: dict[str, Any], llm_client: Any) -> str:
     state["polish_notes"] = all_notes
     state["stage5_status"] = "hitl_review"
     state["current_stage"] = 5
+
+    # Generate abstracts after polishing
+    _generate_abstracts(state, llm_client)
+
     _log(f"Stage 5 done: polished {len(polished_chapters)} chapters")
     return "hitl"
 
 
-def stage6_export(state: dict[str, Any], store: Any, run_id: str, output_format: str = "markdown") -> str:
+def _generate_abstracts(state: dict[str, Any], llm_client: Any) -> None:
+    """Generate Chinese and English abstracts + keywords via LLM.
+
+    Silently skips on any failure so that the pipeline is not blocked.
+    """
+    final_text = state.get("final_text", "")
+    if not final_text.strip():
+        return
+
+    topic = state.get("topic", "")
+    text_snippet = final_text[:8000]
+
+    # Chinese abstract
+    try:
+        zh_resp = llm_client.structured(
+            system=(
+                "你是一位学术论文摘要撰写专家。根据以下论文全文，生成一段300-500字的中文摘要和3-5个关键词。"
+                "返回JSON，keys: abstract (string), keywords (list of strings)。"
+            ),
+            user=json.dumps({"topic": topic, "text": text_snippet}, ensure_ascii=False),
+            route="polish",
+            max_tokens=2000,
+        )
+        if isinstance(zh_resp, dict):
+            state["abstract_zh"] = str(zh_resp.get("abstract", ""))
+            kw = zh_resp.get("keywords", [])
+            state["keywords_zh"] = [str(k) for k in kw] if isinstance(kw, list) else []
+            _log(f"Generated Chinese abstract ({len(state['abstract_zh'])} chars, "
+                 f"{len(state['keywords_zh'])} keywords)")
+    except Exception:  # noqa: BLE001
+        _log("Chinese abstract generation failed (skipped)")
+
+    # English abstract
+    try:
+        en_resp = llm_client.structured(
+            system=(
+                "You are an academic abstract writer. Generate a 200-300 word English abstract "
+                "and 3-5 keywords for the following thesis. "
+                "Return JSON with keys: abstract (string), keywords (list of strings)."
+            ),
+            user=json.dumps({"topic": topic, "text": text_snippet}, ensure_ascii=False),
+            route="polish",
+            max_tokens=2000,
+        )
+        if isinstance(en_resp, dict):
+            state["abstract_en"] = str(en_resp.get("abstract", ""))
+            kw = en_resp.get("keywords", [])
+            state["keywords_en"] = [str(k) for k in kw] if isinstance(kw, list) else []
+            _log(f"Generated English abstract ({len(state['abstract_en'])} chars, "
+                 f"{len(state['keywords_en'])} keywords)")
+    except Exception:  # noqa: BLE001
+        _log("English abstract generation failed (skipped)")
+
+
+def stage6_export(state: dict[str, Any], store: Any, run_id: str,
+                  output_format: str = "markdown", template_path: str | None = None) -> str:
     _log(f"Stage 6: exporting ({output_format})...")
     allowed, _ = gate_export(state)
     if not allowed:
@@ -331,6 +393,8 @@ def stage6_export(state: dict[str, Any], store: Any, run_id: str, output_format:
     )
 
     fmt = output_format.lower().strip()
+    state["export_artifacts"] = {}
+    state["export_warnings"] = []
 
     # Always write the markdown source first – it's the pandoc input and a
     # useful artefact on its own.
@@ -342,14 +406,12 @@ def stage6_export(state: dict[str, Any], store: Any, run_id: str, output_format:
     if fmt in {"md", "markdown"}:
         path = md_path
     elif fmt == "latex":
-        path = store.artifact_path(run_id, "output/thesis.tex")
-        _pandoc_export(md_path, path, "latex")
+        from .latex_export import export_latex_project
+
+        path = export_latex_project(state, store, run_id)
     elif fmt == "pdf":
         path = store.artifact_path(run_id, "output/thesis.pdf")
         _pandoc_export(md_path, path, "pdf")
-    elif fmt == "docx":
-        path = store.artifact_path(run_id, "output/thesis.docx")
-        _pandoc_export(md_path, path, "docx")
     else:
         raise ValueError(f"Unsupported output format: {output_format}")
 
@@ -358,6 +420,21 @@ def stage6_export(state: dict[str, Any], store: Any, run_id: str, output_format:
     state["stage6_status"] = "completed"
     state["current_stage"] = 6
     return "done"
+
+
+def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str, Any]:
+    """Fallback: call LLM in plain text mode and wrap as dict with 'text' key."""
+    try:
+        out = llm_client.text(
+            system="Write the subsection content directly as plain text. Do NOT use JSON formatting.",
+            user=user,
+            route="writing",
+            max_tokens=2800,
+        )
+        return {"text": out, "citations_used": [], "key_claims": [],
+                "self_assessment": {"confidence": 0.3, "weak_spots": ["fallback-mode"], "needs_revision": True}}
+    except Exception:
+        return {"text": ""}
 
 
 def _write_subtasks(
@@ -429,7 +506,23 @@ def _write_subtasks(
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)
 
-        out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
+        # Retry up to 2 times on JSON parse errors (common with smaller models)
+        _max_retries = 2
+        out = None
+        for _attempt in range(_max_retries + 1):
+            try:
+                out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
+                break
+            except Exception as exc:
+                if "JSON" in str(exc) and _attempt < _max_retries:
+                    continue
+                # On final JSON failure, fall back to raw text extraction
+                if "JSON" in str(exc):
+                    out = _extract_text_from_raw(llm_client, system, user)
+                    break
+                raise
+        if out is None:
+            out = {}
         text = str(out.get("text", "")).strip()
         if not text:
             text = f"[{chapter_title}] {subtask['title']}\n\n(LLM returned empty content.)"
@@ -566,7 +659,6 @@ def _pandoc_export(md_path: str, output_path: str, fmt: str) -> None:
     fmt values:
       "latex"  → thesis.tex  (ctexart, CJK fonts, math-aware)
       "pdf"    → thesis.pdf  (xelatex) + thesis.tex alongside it
-      "docx"   → thesis.docx
 
     Raises RuntimeError with an actionable message when pandoc / xelatex is
     not found, or when pandoc exits with a non-zero status.
@@ -615,14 +707,6 @@ def _pandoc_export(md_path: str, output_path: str, fmt: str) -> None:
         tex_path = os.path.splitext(output_path)[0] + ".tex"
         _run(["pandoc", md_path] + _cjk + ["-o", tex_path])
         _run(["pandoc", md_path] + _cjk + ["--pdf-engine=xelatex", "-o", output_path])
-
-    elif fmt == "docx":
-        _run([
-            "pandoc", md_path,
-            "--from", "markdown+tex_math_single_backslash",
-            "--toc", "--toc-depth=3", "--number-sections",
-            "-o", output_path,
-        ])
 
     else:
         raise ValueError(f"_pandoc_export: unsupported fmt {fmt!r}")

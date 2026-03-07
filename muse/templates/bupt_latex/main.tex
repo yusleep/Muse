@@ -1,0 +1,47 @@
+\documentclass[UTF8,12pt]{ctexbook}
+
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{setspace}
+\usepackage[numbers,sort&compress]{natbib}
+
+\input{config/info}
+\input{config/bit}
+
+\begin{document}
+\frontmatter
+\begin{titlepage}
+  \centering
+  {\zihao{2}\bfseries 北京邮电大学研究生学位论文\par}
+  \vspace{2cm}
+  {\zihao{2}\bfseries \thesistitlezh\par}
+  \vspace{1cm}
+  {\Large \thesistitleen\par}
+  \vfill
+  \begin{tabular}{rl}
+    作者： & \authorname \\
+    学号： & \studentid \\
+    学科： & \disciplinename \\
+    导师： & \supervisorname
+  \end{tabular}
+  \vfill
+  {\graduatedate\par}
+\end{titlepage}
+
+\chapter*{摘\ 要}
+\input{Chapter/abstract_zh}
+
+\chapter*{ABSTRACT}
+\input{Chapter/abstract_en}
+
+\tableofcontents
+
+\mainmatter
+\input{Chapter/chapter1}
+
+\bibliographystyle{plainnat}
+\bibliography{Bib/thesis}
+\end{document}

@@ -1,7 +1,7 @@
 import unittest
 
-from thesis_agent.orchestrator import can_advance_to_stage, gate_export
-from thesis_agent.schemas import new_thesis_state
+from muse.orchestrator import can_advance_to_stage, gate_export
+from muse.schemas import new_thesis_state
 
 
 class OrchestratorGateTests(unittest.TestCase):

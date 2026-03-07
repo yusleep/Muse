@@ -1,6 +1,6 @@
-# Thesis Agent v3 (Usable Runtime)
+# Muse v3 (Usable Runtime)
 
-This repository now contains a runnable v3 thesis-writing agent pipeline with real integrations and resumable runs.
+This repository now contains the runnable Muse v3 pipeline with real integrations and resumable runs.
 
 ## What is implemented
 
@@ -10,27 +10,27 @@ This repository now contains a runnable v3 thesis-writing agent pipeline with re
   - Stage 3: chapter/subtask writing with review-revise loop
   - Stage 4: citation verification (DOI + metadata + claim support NLI)
   - Stage 5: cross-chapter polish
-  - Stage 6: export (markdown / latex / docx)
+  - Stage 6: export (markdown / LaTeX project / PDF)
+- `latex` export generates a vendored BUPT thesis project, an Overleaf-ready `.zip`, and an optional locally compiled PDF when `latexmk` or `xelatex` is available.
 - HITL checkpoints with pause/resume flow.
 - Persistent run directories under `runs/<run_id>/`.
 - Append-only audit log `runs/<run_id>/audit.jsonl`.
-- CLI commands: `check`, `run`, `resume`, `review`, `export`.
- - CLI commands: `check`, `debug-llm`, `run`, `resume`, `review`, `export`.
+- CLI commands: `check`, `debug-llm`, `run`, `resume`, `review`, `export`.
 
 ## Environment variables (required)
 
-- `THESIS_AGENT_LLM_API_KEY`
-- `THESIS_AGENT_LLM_MODEL`
+- `MUSE_LLM_API_KEY`
+- `MUSE_LLM_MODEL`
 
 ## Environment variables (optional)
 
-- `THESIS_AGENT_LLM_BASE_URL` (default: `https://api.openai.com/v1`)
-- `THESIS_AGENT_RUNS_DIR` (default: `runs`)
-- `THESIS_AGENT_SEMANTIC_SCHOLAR_API_KEY`
-- `THESIS_AGENT_OPENALEX_EMAIL`
-- `THESIS_AGENT_CROSSREF_MAILTO`
-- `THESIS_AGENT_MODEL_ROUTER_JSON` (OpenClaw-style multi-model router config)
-- `THESIS_AGENT_MODEL_ROUTER_PATH` (path to JSON config file, alternative to inline JSON)
+- `MUSE_LLM_BASE_URL` (default: `https://api.openai.com/v1`)
+- `MUSE_RUNS_DIR` (default: `runs`)
+- `MUSE_SEMANTIC_SCHOLAR_API_KEY`
+- `MUSE_OPENALEX_EMAIL`
+- `MUSE_CROSSREF_MAILTO`
+- `MUSE_MODEL_ROUTER_JSON` (OpenClaw-style multi-model router config)
+- `MUSE_MODEL_ROUTER_PATH` (path to JSON config file, alternative to inline JSON)
 
 ## OpenClaw-style multi-model routing
 
@@ -47,7 +47,7 @@ Minimal example:
 ```bash
 export OPENAI_API_KEY="<openai-key>"
 export OPENROUTER_API_KEY="<openrouter-key>"
-export THESIS_AGENT_MODEL_ROUTER_JSON='{
+export MUSE_MODEL_ROUTER_JSON='{
   "auth": {
     "profiles": {
       "openai": { "apiKeyEnv": "OPENAI_API_KEY" },
@@ -105,7 +105,7 @@ export THESIS_AGENT_MODEL_ROUTER_JSON='{
 }'
 ```
 
-When `THESIS_AGENT_MODEL_ROUTER_JSON` is set, the runtime automatically routes by task (`outline`, `writing`, `review`, `reasoning`, `polish`) and falls back when primary fails.
+When `MUSE_MODEL_ROUTER_JSON` is set, the runtime automatically routes by task (`outline`, `writing`, `review`, `reasoning`, `polish`) and falls back when primary fails.
 
 ### Quick config for `https://api.123nhh.me/v1`
 
@@ -117,14 +117,14 @@ Use it directly:
 
 ```bash
 export NHH_API_KEY="<fill-your-key>"
-export THESIS_AGENT_MODEL_ROUTER_PATH="./model-router.123nhh.example.json"
+export MUSE_MODEL_ROUTER_PATH="./model-router.123nhh.example.json"
 ```
 
 You can keep legacy vars as fallback compatibility:
 
 ```bash
-export THESIS_AGENT_LLM_API_KEY="$NHH_API_KEY"
-export THESIS_AGENT_LLM_MODEL="gpt-4.1-mini"
+export MUSE_LLM_API_KEY="$NHH_API_KEY"
+export MUSE_LLM_MODEL="gpt-4.1-mini"
 ```
 
 ### Quick config for local Codex Plus OAuth
@@ -136,8 +136,8 @@ Template file:
 This reads token from local Codex login file (`~/.codex/auth.json`, path `tokens.access_token`) and sends requests to ChatGPT Codex backend (`https://chatgpt.com/backend-api/codex/responses`) using OAuth-compatible headers (same transport style used by opencode Codex OAuth plugin).
 
 ```bash
-export THESIS_AGENT_MODEL_ROUTER_PATH="./model-router.codex-plus-oauth.example.json"
-python3 -m thesis_agent check
+export MUSE_MODEL_ROUTER_PATH="./model-router.codex-plus-oauth.example.json"
+python3 -m muse check
 ```
 
 If not logged in locally, run `codex login` first.
@@ -147,27 +147,27 @@ If not logged in locally, run `codex login` first.
 1. Export keys:
 
 ```bash
-export THESIS_AGENT_LLM_API_KEY="<your-key>"
-export THESIS_AGENT_LLM_MODEL="gpt-4.1-mini"
+export MUSE_LLM_API_KEY="<your-key>"
+export MUSE_LLM_MODEL="gpt-4.1-mini"
 ```
 
 2. Validate connectivity:
 
 ```bash
-python3 -m thesis_agent check
+python3 -m muse check
 ```
 
 Debug LLM routing failures in detail:
 
 ```bash
-python3 -m thesis_agent debug-llm --route default
-python3 -m thesis_agent debug-llm --route reasoning
+python3 -m muse debug-llm --route default
+python3 -m muse debug-llm --route reasoning
 ```
 
 3. Start a run (pause at HITL):
 
 ```bash
-python3 -m thesis_agent run \
+python3 -m muse run \
   --topic "Multi-agent systems for academic writing" \
   --discipline "Computer Science" \
   --language zh \
@@ -178,29 +178,32 @@ python3 -m thesis_agent run \
 4. Resume after review:
 
 ```bash
-python3 -m thesis_agent review --run-id <run_id> --stage 1 --approve --comment "ok"
-python3 -m thesis_agent resume --run-id <run_id>
+python3 -m muse review --run-id <run_id> --stage 1 --approve --comment "ok"
+python3 -m muse resume --run-id <run_id>
 ```
 
 5. One-shot auto-approved full run:
 
 ```bash
-python3 -m thesis_agent run \
+python3 -m muse run \
   --topic "Multi-agent systems for academic writing" \
   --discipline "Computer Science" \
   --auto-approve \
   --output-format markdown
 ```
 
-6. Export again with another format:
+6. Export a BUPT LaTeX project for Overleaf:
 
 ```bash
-python3 -m thesis_agent export --run-id <run_id> --output-format latex
+python3 -m muse export --run-id <run_id> --output-format latex
 ```
+
+This writes `runs/<run_id>/output/latex_project/`, packages `runs/<run_id>/output/latex_project.zip`, and attempts `runs/<run_id>/output/thesis.pdf` when local TeX tooling is available.
 
 ## Notes
 
-- `docx` output requires `python-docx` installed.
+- `latex` is the rich thesis export path; it always produces the project directory plus an Overleaf-uploadable `.zip`.
+- Local PDF compilation is best-effort and uses `latexmk` first, then `xelatex` when available.
 - Real integrations are used; no offline mock mode is included.
 - The agent enforces export blocking when `flagged_citations` is non-empty.
 

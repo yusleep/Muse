@@ -18,7 +18,7 @@ class ProviderError(RuntimeError):
 
 
 class HttpClient:
-    def __init__(self, timeout_seconds: int = 45) -> None:
+    def __init__(self, timeout_seconds: int = 120) -> None:
         self.timeout_seconds = timeout_seconds
 
     def get_json(self, url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
@@ -410,46 +410,56 @@ class LLMClient:
         response_format: dict[str, Any] | None = None,
         max_tokens: int = 2500,
     ) -> dict[str, Any]:
-        attempts = self.router.resolve(route)
-        failures: list[str] = []
+        import time as _time
 
-        for attempt in attempts:
-            payload = _build_request_payload(
-                attempt=attempt,
-                system=system,
-                user=user,
-                temperature=temperature,
-                response_format=response_format,
-                max_tokens=max_tokens,
-                streaming=attempt.requires_streaming,
-            )
+        _transient_retries = 2
+        for _retry in range(_transient_retries + 1):
+            attempts = self.router.resolve(route)
+            failures: list[str] = []
 
-            for profile_idx, headers in enumerate(attempt.header_candidates, start=1):
-                try:
-                    if attempt.requires_streaming:
-                        result = self.http.post_json_sse(attempt.endpoint_url, payload, headers=headers)
-                    else:
-                        result = self.http.post_json(attempt.endpoint_url, payload, headers=headers)
-                except Exception as exc:  # noqa: BLE001
-                    failures.append(f"{attempt.model_id}[profile#{profile_idx}]: {exc}")
-                    continue
+            for attempt in attempts:
+                payload = _build_request_payload(
+                    attempt=attempt,
+                    system=system,
+                    user=user,
+                    temperature=temperature,
+                    response_format=response_format,
+                    max_tokens=max_tokens,
+                    streaming=attempt.requires_streaming,
+                )
 
-                try:
-                    message = _extract_llm_message(result)
-                except Exception:  # noqa: BLE001
-                    failures.append(f"{attempt.model_id}[profile#{profile_idx}]: unexpected response shape")
-                    continue
+                for profile_idx, headers in enumerate(attempt.header_candidates, start=1):
+                    try:
+                        if attempt.requires_streaming:
+                            result = self.http.post_json_sse(attempt.endpoint_url, payload, headers=headers)
+                        else:
+                            result = self.http.post_json(attempt.endpoint_url, payload, headers=headers)
+                    except Exception as exc:  # noqa: BLE001
+                        failures.append(f"{attempt.model_id}[profile#{profile_idx}]: {exc}")
+                        continue
 
-                return {
-                    "content": message,
-                    "usage": result.get("usage", {}),
-                    "raw": result,
-                    "model_id": attempt.model_id,
-                    "provider": attempt.provider_name,
-                }
+                    try:
+                        message = _extract_llm_message(result)
+                    except Exception:  # noqa: BLE001
+                        failures.append(f"{attempt.model_id}[profile#{profile_idx}]: unexpected response shape")
+                        continue
 
-        failure_text = " | ".join(failures) if failures else "no attempts were available"
-        raise ProviderError(f"All model attempts failed for route '{route}': {failure_text}")
+                    return {
+                        "content": message,
+                        "usage": result.get("usage", {}),
+                        "raw": result,
+                        "model_id": attempt.model_id,
+                        "provider": attempt.provider_name,
+                    }
+
+            # Check if failures are transient (timeout/network) and we can retry
+            failure_text = " | ".join(failures) if failures else "no attempts were available"
+            is_transient = any(kw in failure_text.lower() for kw in ("timed out", "timeout", "network", "connection", "502", "503", "429", "invalid json response"))
+            if is_transient and _retry < _transient_retries:
+                _time.sleep(5 * (_retry + 1))
+                continue
+
+            raise ProviderError(f"All model attempts failed for route '{route}': {failure_text}")
 
     def text(
         self,
@@ -1103,6 +1113,7 @@ def _fix_invalid_escapes(s: str) -> str:
     return "".join(result)
 
 
+
 def _parse_json_relaxed(raw: str) -> Any:
     def _try_loads(s: str) -> Any:
         try:
@@ -1110,7 +1121,10 @@ def _parse_json_relaxed(raw: str) -> Any:
         except json.JSONDecodeError:
             fixed = _fix_invalid_escapes(s)
             if fixed != s:
-                return json.loads(fixed)
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    pass
             raise
 
     try:
@@ -1129,7 +1143,19 @@ def _parse_json_relaxed(raw: str) -> Any:
     start = raw.find("{")
     end = raw.rfind("}")
     if start >= 0 and end > start:
-        return _try_loads(raw[start : end + 1])
+        try:
+            return _try_loads(raw[start : end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # Ultimate fallback: use json_repair library for LLM-typical mistakes
+    try:
+        from json_repair import repair_json
+        repaired = repair_json(raw, return_objects=True)
+        if isinstance(repaired, dict):
+            return repaired
+    except Exception:
+        pass
 
     raise ProviderError("Could not parse JSON from LLM response")
 
