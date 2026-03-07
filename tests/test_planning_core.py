@@ -1,7 +1,7 @@
 import unittest
 
-from thesis_agent.planning import plan_subtasks
-from thesis_agent.chapter import should_iterate
+from muse.planning import plan_subtasks
+from muse.chapter import should_iterate
 
 
 class PlanSubtasksTests(unittest.TestCase):

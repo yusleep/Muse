@@ -22,7 +22,7 @@ class TestRagIndexBm25(unittest.TestCase):
         ]
 
     def test_build_and_retrieve_returns_list(self):
-        from thesis_agent.rag import RagIndex
+        from muse.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             refs = self._make_refs()
@@ -36,7 +36,7 @@ class TestRagIndexBm25(unittest.TestCase):
                 self.assertIn("score", r)
 
     def test_empty_refs_returns_empty_list(self):
-        from thesis_agent.rag import RagIndex
+        from muse.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             idx = RagIndex.build([], tmp)
@@ -44,8 +44,8 @@ class TestRagIndexBm25(unittest.TestCase):
 
     def test_cache_is_reused(self):
         """Second build call must load from cache, not call _build_fresh again."""
-        import thesis_agent.rag as rag_module
-        from thesis_agent.rag import RagIndex
+        import muse.rag as rag_module
+        from muse.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             refs = self._make_refs(2)
@@ -61,8 +61,8 @@ class TestRagIndexBm25(unittest.TestCase):
 
     def test_cache_invalidated_on_content_change(self):
         """If source file mtimes change, cache should be rebuilt."""
-        import thesis_agent.rag as rag_module
-        from thesis_agent.rag import RagIndex, _cache_valid
+        import muse.rag as rag_module
+        from muse.rag import RagIndex, _cache_valid
 
         with tempfile.TemporaryDirectory() as tmp:
             # Write a file so we have a real filepath
@@ -93,7 +93,7 @@ class TestRagIndexBm25(unittest.TestCase):
                 mock_bf.assert_called_once()
 
     def test_top_k_respected(self):
-        from thesis_agent.rag import RagIndex
+        from muse.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             refs = self._make_refs(10)
@@ -103,7 +103,7 @@ class TestRagIndexBm25(unittest.TestCase):
 
     def test_use_embedding_false_when_chunks_empty(self):
         """use_embedding should be False when there are no chunks to embed."""
-        from thesis_agent.rag import RagIndex
+        from muse.rag import RagIndex
 
         with tempfile.TemporaryDirectory() as tmp:
             # Refs with no text → no chunks → use_embedding must be False in meta
@@ -123,7 +123,7 @@ class TestRagIndexEmbedding(unittest.TestCase):
         except ImportError:
             self.skipTest("numpy not installed")
 
-        from thesis_agent.rag import RagIndex, _model_cache, _MODEL_NAME
+        from muse.rag import RagIndex, _model_cache, _MODEL_NAME
 
         chunks = [
             {"ref_id": "@r0", "text": "deep learning neural network"},
@@ -152,19 +152,19 @@ class TestRagIndexEmbedding(unittest.TestCase):
 
 class TestChunking(unittest.TestCase):
     def test_single_chunk_for_short_text(self):
-        from thesis_agent.rag import _chunk_text
+        from muse.rag import _chunk_text
 
         chunks = _chunk_text("word " * 100)
         self.assertEqual(len(chunks), 1)
 
     def test_multiple_chunks_for_long_text(self):
-        from thesis_agent.rag import _chunk_text
+        from muse.rag import _chunk_text
 
         chunks = _chunk_text("word " * 700, chunk_size=300, overlap=50)
         self.assertGreater(len(chunks), 1)
 
     def test_overlap_present(self):
-        from thesis_agent.rag import _chunk_text
+        from muse.rag import _chunk_text
 
         words = [f"w{i}" for i in range(400)]
         text = " ".join(words)
@@ -176,7 +176,7 @@ class TestChunking(unittest.TestCase):
         self.assertGreater(overlap_count, 0)
 
     def test_empty_text_returns_empty(self):
-        from thesis_agent.rag import _chunk_text
+        from muse.rag import _chunk_text
 
         self.assertEqual(_chunk_text(""), [])
         self.assertEqual(_chunk_text("   "), [])

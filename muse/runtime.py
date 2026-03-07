@@ -1,4 +1,4 @@
-"""Runtime wiring for full v3 thesis agent."""
+"""Runtime wiring for Muse."""
 
 from __future__ import annotations
 
@@ -21,12 +21,15 @@ from .stages import (
 from .store import RunStore
 
 
+_PUBLIC_EXPORT_FORMATS = {"md", "markdown", "latex", "pdf"}
+
+
 def _log(msg: str) -> None:
-    print(f"[thesis-agent] {msg}", file=sys.stderr, flush=True)
+    print(f"[muse] {msg}", file=sys.stderr, flush=True)
 
 
 def _warn(msg: str) -> None:
-    print(f"[thesis-agent] WARNING: {msg}", file=sys.stderr, flush=True)
+    print(f"[muse] WARNING: {msg}", file=sys.stderr, flush=True)
 
 
 class Runtime:
@@ -81,6 +84,10 @@ class Runtime:
                 self.rag_index = None
 
     def build_engine(self, run_id: str, output_format: str) -> ThesisEngine:
+        fmt = output_format.lower().strip()
+        if fmt not in _PUBLIC_EXPORT_FORMATS:
+            raise ValueError(f"Unsupported output format: {output_format}")
+
         audit_path = self.store.artifact_path(run_id, "audit.jsonl")
         audit_sink = JsonlAuditSink(audit_path)
 
@@ -136,8 +143,8 @@ class Runtime:
             return result
 
         def s6(ctx: Any) -> str:
-            _audit(6, "stage_start", input_summary=output_format)
-            result = stage6_export(ctx.state, self.store, run_id, output_format=output_format)
+            _audit(6, "stage_start", input_summary=fmt)
+            result = stage6_export(ctx.state, self.store, run_id, output_format=fmt)
             _audit(6, "stage_end", output_summary=ctx.state.get("output_filepath", ""))
             return result
 

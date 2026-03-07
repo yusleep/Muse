@@ -1,4 +1,4 @@
-"""State schema helpers for the thesis agent."""
+"""State schema helpers for Muse."""
 
 from __future__ import annotations
 
@@ -113,8 +113,14 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "final_text": "",
     "output_format": "markdown",
     "output_filepath": "",
+    "export_artifacts": {},
+    "export_warnings": [],
     "local_refs_count": 0,
     "rag_enabled": False,
+    "abstract_zh": "",
+    "keywords_zh": [],
+    "abstract_en": "",
+    "keywords_en": [],
     "stage1_status": "pending",
     "stage2_status": "pending",
     "stage3_status": "pending",
@@ -158,6 +164,8 @@ def new_thesis_state(
         final_text="",
         output_format="markdown",
         output_filepath="",
+        export_artifacts={},
+        export_warnings=[],
         stage1_status="pending",
         stage2_status="pending",
         stage3_status="pending",

@@ -1,4 +1,4 @@
-"""Core package for thesis writing agent v3 runtime."""
+"""Core package for the Muse runtime."""
 
 from .audit import JsonlAuditSink, build_event
 from .chapter import apply_chapter_review, build_revision_instructions, should_iterate

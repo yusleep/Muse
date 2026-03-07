@@ -3,8 +3,8 @@ import os
 import tempfile
 import unittest
 
-from thesis_agent.audit import JsonlAuditSink, build_event
-from thesis_agent.citation import verify_all_citations
+from muse.audit import JsonlAuditSink, build_event
+from muse.citation import verify_all_citations
 
 
 class CitationVerificationTests(unittest.TestCase):

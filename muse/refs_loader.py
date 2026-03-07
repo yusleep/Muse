@@ -1,4 +1,4 @@
-"""Local reference file ingestion for the thesis agent.
+"""Local reference file ingestion for Muse.
 
 Scans a refs_dir for PDF, Markdown/TXT, and DOCX files, extracts text and
 metadata, and returns them in the same dict shape used by AcademicSearchClient.
@@ -49,7 +49,7 @@ def load_local_refs(refs_dir: str) -> list[dict[str, Any]]:
             if ref is not None:
                 results.append(ref)
         except Exception as exc:  # noqa: BLE001
-            print(f"[thesis-agent] WARNING: skipping {path.name}: {exc}", file=sys.stderr, flush=True)
+            print(f"[muse] WARNING: skipping {path.name}: {exc}", file=sys.stderr, flush=True)
     return results
 
 

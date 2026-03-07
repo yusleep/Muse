@@ -7,4 +7,5 @@ runs/
 *.Zone.Identifier
 .env
 .worktrees/
+.ralph-tui/
 refs/.index/

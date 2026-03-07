@@ -1,12 +1,28 @@
 import tempfile
 import unittest
 
-from thesis_agent.engine import ThesisEngine, EngineContext
-from thesis_agent.schemas import new_thesis_state
-from thesis_agent.store import RunStore
+from muse.config import Settings
+from muse.engine import ThesisEngine, EngineContext
+from muse.runtime import Runtime
+from muse.schemas import new_thesis_state
+from muse.store import RunStore
 
 
 class RuntimeFlowTests(unittest.TestCase):
+    def _make_runtime(self, runs_dir: str) -> Runtime:
+        settings = Settings(
+            llm_api_key="x",
+            llm_base_url="http://localhost",
+            llm_model="stub",
+            model_router_config={},
+            runs_dir=runs_dir,
+            semantic_scholar_api_key=None,
+            openalex_email=None,
+            crossref_mailto=None,
+            refs_dir=None,
+        )
+        return Runtime(settings)
+
     def test_stops_at_hitl_without_auto_approve(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = RunStore(base_dir=tmp)
@@ -85,6 +101,14 @@ class RuntimeFlowTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "blocked")
             self.assertEqual(result["stage"], 6)
+
+    def test_build_engine_rejects_docx_output_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = self._make_runtime(tmp)
+            run_id = runtime.store.create_run(topic="topic")
+
+            with self.assertRaises(ValueError):
+                runtime.build_engine(run_id=run_id, output_format="docx")
 
 
 if __name__ == "__main__":

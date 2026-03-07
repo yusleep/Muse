@@ -14,9 +14,9 @@ import os
 import tempfile
 import unittest
 
-from thesis_agent.config import Settings
-from thesis_agent.runtime import Runtime
-from thesis_agent.schemas import new_thesis_state
+from muse.config import Settings
+from muse.runtime import Runtime
+from muse.schemas import new_thesis_state
 
 
 # ---------------------------------------------------------------------------

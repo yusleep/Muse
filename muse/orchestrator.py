@@ -1,4 +1,4 @@
-"""Stage transition guards for the thesis agent workflow."""
+"""Stage transition guards for the Muse workflow."""
 
 from __future__ import annotations
 

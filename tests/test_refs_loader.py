@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from thesis_agent.refs_loader import (
+from muse.refs_loader import (
     _extract_year_from_stem,
     _local_ref_id,
     _stem_to_title,
