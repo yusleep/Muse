@@ -175,6 +175,50 @@ class LatexExportTests(unittest.TestCase):
             self.assertIn(r"\input{Chapter/chapter2}", main_tex)
             self.assertNotIn("这是一个占位章节", chapter1)
 
+    def test_export_latex_project_preserves_math_and_existing_latex_commands(self):
+        from muse.latex_export import export_latex_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = RunStore(base_dir=tmp)
+            run_id = store.create_run(topic="topic")
+            state = new_thesis_state(
+                project_id=run_id,
+                topic="topic",
+                discipline="cs",
+                language="zh",
+                format_standard="GB/T 7714-2015",
+            )
+            state["chapter_results"] = [
+                {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "理论分析",
+                    "merged_text": "# 分析\n\n能量公式为 $E=mc^2$，并参考 \\cite{ref_complete}。",
+                }
+            ]
+            state["references"] = [
+                {
+                    "ref_id": "@ref_complete",
+                    "title": "Complete Reference",
+                    "authors": ["Alice Zhang"],
+                    "year": 2024,
+                    "doi": "10.1000/complete",
+                    "venue": "Journal of Testing",
+                    "abstract": "Complete reference abstract.",
+                    "source": "semantic_scholar",
+                    "verified_metadata": True,
+                }
+            ]
+            state["citation_uses"] = [
+                {"cite_key": "@ref_complete", "claim_id": "c1", "chapter_id": "ch_01", "subtask_id": "s1"},
+            ]
+
+            project_dir = export_latex_project(state, store, run_id)
+
+            chapter1 = Path(project_dir, "Chapter", "chapter1.tex").read_text(encoding="utf-8")
+            self.assertIn(r"$E=mc^2$", chapter1)
+            self.assertIn(r"\cite{ref_complete}", chapter1)
+            self.assertNotIn(r"\$E=mc\textasciicircum{}2\$", chapter1)
+
     def test_export_latex_project_writes_bibliography_and_placeholder_warnings(self):
         from muse.latex_export import export_latex_project
 
@@ -221,6 +265,7 @@ class LatexExportTests(unittest.TestCase):
             project_dir = export_latex_project(state, store, run_id)
 
             bib_text = Path(project_dir, "Bib", "thesis.bib").read_text(encoding="utf-8")
+            main_text = Path(project_dir, "main.tex").read_text(encoding="utf-8")
             self.assertIn("@article{ref_complete,", bib_text)
             self.assertIn("title = {Complete Reference}", bib_text)
             self.assertIn("author = {Alice Zhang and Bob Li}", bib_text)
@@ -231,6 +276,7 @@ class LatexExportTests(unittest.TestCase):
             self.assertIn("note = {Placeholder bibliography entry generated from incomplete metadata.}", bib_text)
             self.assertIn("@misc{ref_missing,", bib_text)
             self.assertIn(r"title = {Missing reference metadata for ref\_missing}", bib_text)
+            self.assertIn(r"\nocite{ref_complete,ref_partial,ref_missing}", main_text)
 
             self.assertIn("export_warnings", state)
             self.assertTrue(any("ref_partial" in warning for warning in state["export_warnings"]))
@@ -272,6 +318,44 @@ class LatexExportTests(unittest.TestCase):
             copied_asset = Path(project_dir, "resources", "generated_assets", "asset_1.png")
             self.assertTrue(copied_asset.is_file())
             self.assertEqual(copied_asset.read_bytes(), b"fake-png")
+
+    def test_export_latex_project_resolves_relative_image_paths_from_store_context(self):
+        from muse.latex_export import export_latex_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            store = RunStore(base_dir=str(runs_dir))
+            run_id = store.create_run(topic="topic")
+            state = new_thesis_state(
+                project_id=run_id,
+                topic="topic",
+                discipline="cs",
+                language="zh",
+                format_standard="GB/T 7714-2015",
+            )
+
+            asset_dir = Path(tmp) / "assets"
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            image_path = asset_dir / "fig.png"
+            image_path.write_bytes(b"relative-png")
+
+            state["chapter_results"] = [
+                {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "系统设计",
+                    "merged_text": "# 总体架构\n\n![系统架构](assets/fig.png)\n\n图示说明。",
+                }
+            ]
+
+            project_dir = export_latex_project(state, store, run_id)
+
+            chapter_text = Path(project_dir, "Chapter", "chapter1.tex").read_text(encoding="utf-8")
+            self.assertIn(r"\includegraphics[width=0.9\textwidth]{resources/generated_assets/asset_1.png}", chapter_text)
+            self.assertNotIn("![系统架构](assets/fig.png)", chapter_text)
+
+            copied_asset = Path(project_dir, "resources", "generated_assets", "asset_1.png")
+            self.assertTrue(copied_asset.is_file())
+            self.assertEqual(copied_asset.read_bytes(), b"relative-png")
 
     def test_export_latex_project_writes_overleaf_zip_archive(self):
         from muse.latex_export import export_latex_project

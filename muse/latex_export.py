@@ -19,7 +19,11 @@ REQUIRED_TEMPLATE_ASSETS = (
 )
 
 _TITLE_PLACEHOLDER = r"\input{Chapter/chapter1}"
+_BIBLIOGRAPHY_SENTINEL = r"\bibliographystyle{plainnat}"
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<path>[^)]+)\)")
+_LATEX_PASSTHROUGH_RE = re.compile(
+    r"(\\[A-Za-z]+(?:\[[^\]]*\])?(?:\{[^{}]*\})*|\$\$.*?\$\$|\$[^$\n]+\$)"
+)
 _PDF_OUTPUT_NAME = "thesis.pdf"
 _ZIP_OUTPUT_NAME = "latex_project.zip"
 
@@ -71,6 +75,23 @@ def _join_keywords(raw_value: Any, *, separator: str, default: str) -> str:
     return default
 
 
+def _latex_escape_with_passthrough(value: Any) -> str:
+    text = str(value or "")
+    rendered: list[str] = []
+    cursor = 0
+
+    for match in _LATEX_PASSTHROUGH_RE.finditer(text):
+        if match.start() > cursor:
+            rendered.append(_latex_escape(text[cursor:match.start()]))
+        rendered.append(match.group(0))
+        cursor = match.end()
+
+    if cursor < len(text):
+        rendered.append(_latex_escape(text[cursor:]))
+
+    return "".join(rendered)
+
+
 def _render_info_tex(state: dict[str, Any]) -> str:
     title_zh = _first_present(state, "title_zh", "thesis_title_zh", "thesis_title", "title", "topic")
     title_en = _first_present(state, "title_en", "thesis_title_en", "english_title")
@@ -120,7 +141,40 @@ def _render_abstract(text: Any, keywords: Any, *, keyword_label: str, separator:
     return f"{rendered}\n"
 
 
-def _resolve_asset_source(raw_path: str) -> Path | None:
+def _candidate_asset_roots(state: dict[str, Any], *, store: Any) -> list[Path]:
+    roots: list[Path] = []
+    seen: set[str] = set()
+
+    def _add(raw_value: Any) -> None:
+        text = str(raw_value or "").strip()
+        if not text:
+            return
+        resolved = Path(text).expanduser().resolve()
+        key = str(resolved)
+        if key not in seen:
+            seen.add(key)
+            roots.append(resolved)
+
+    _add(Path.cwd())
+
+    base_dir = getattr(store, "base_dir", None)
+    if base_dir:
+        _add(base_dir)
+        _add(Path(base_dir).expanduser().resolve().parent)
+
+    metadata = _metadata_bucket(state)
+    for key in ("asset_root", "source_root", "source_dir", "working_dir", "workspace_root"):
+        _add(metadata.get(key))
+
+    asset_roots = metadata.get("asset_roots")
+    if isinstance(asset_roots, list):
+        for item in asset_roots:
+            _add(item)
+
+    return roots
+
+
+def _resolve_asset_source(raw_path: str, *, search_roots: list[Path]) -> Path | None:
     candidate = str(raw_path or "").strip().strip("<>")
     if not candidate or "://" in candidate:
         return None
@@ -128,7 +182,7 @@ def _resolve_asset_source(raw_path: str) -> Path | None:
     candidate_path = Path(candidate).expanduser()
     probes = [candidate_path]
     if not candidate_path.is_absolute():
-        probes.append((Path.cwd() / candidate_path).resolve())
+        probes.extend((root / candidate_path).resolve() for root in search_roots)
 
     for probe in probes:
         if probe.is_file():
@@ -176,6 +230,7 @@ def _render_markdown_body(
     project_dir: Path | None = None,
     warnings: list[str] | None = None,
     copied_assets: dict[str, str] | None = None,
+    search_roots: list[Path] | None = None,
 ) -> str:
     heading_commands = {
         1: "section",
@@ -203,7 +258,10 @@ def _render_markdown_body(
 
         image_match = _MARKDOWN_IMAGE_RE.fullmatch(stripped)
         if image_match and project_dir is not None and warnings is not None and copied_assets is not None:
-            source_path = _resolve_asset_source(image_match.group("path"))
+            source_path = _resolve_asset_source(
+                image_match.group("path"),
+                search_roots=search_roots or [Path.cwd()],
+            )
             if source_path is None:
                 warnings.append(
                     f"Could not resolve referenced asset '{image_match.group('path')}'. Leaving the original markdown image text in chapter output."
@@ -216,7 +274,7 @@ def _render_markdown_body(
             rendered_lines.append("")
             continue
 
-        rendered_lines.append(_latex_escape(stripped))
+        rendered_lines.append(_latex_escape_with_passthrough(stripped))
 
     return "\n".join(rendered_lines).strip()
 
@@ -228,12 +286,14 @@ def _render_chapter_tex(
     project_dir: Path,
     warnings: list[str],
     copied_assets: dict[str, str],
+    search_roots: list[Path],
 ) -> str:
     rendered_body = _render_markdown_body(
         chapter_text,
         project_dir=project_dir,
         warnings=warnings,
         copied_assets=copied_assets,
+        search_roots=search_roots,
     )
     parts = [f"\\chapter{{{_latex_escape(chapter_title)}}}"]
     if rendered_body:
@@ -400,8 +460,9 @@ def _write_bibliography(project_dir: Path, state: dict[str, Any], warnings: list
     bib_path.write_text("\n\n".join(entries) + "\n", encoding="utf-8")
 
 
-def _write_rendered_files(project_dir: Path, state: dict[str, Any], warnings: list[str]) -> None:
+def _write_rendered_files(project_dir: Path, state: dict[str, Any], warnings: list[str], *, store: Any) -> None:
     copied_assets: dict[str, str] = {}
+    search_roots = _candidate_asset_roots(state, store=store)
 
     info_path = project_dir / "config" / "info.tex"
     info_path.write_text(_render_info_tex(state), encoding="utf-8")
@@ -441,6 +502,7 @@ def _write_rendered_files(project_dir: Path, state: dict[str, Any], warnings: li
                 project_dir=project_dir,
                 warnings=warnings,
                 copied_assets=copied_assets,
+                search_roots=search_roots,
             ),
             encoding="utf-8",
         )
@@ -453,7 +515,20 @@ def _write_rendered_files(project_dir: Path, state: dict[str, Any], warnings: li
             "Unable to update LaTeX chapter inputs: expected placeholder "
             f"'{_TITLE_PLACEHOLDER}' in {main_path}."
         )
-    main_path.write_text(main_text.replace(_TITLE_PLACEHOLDER, "\n".join(chapter_inputs)), encoding="utf-8")
+    rendered_main = main_text.replace(_TITLE_PLACEHOLDER, "\n".join(chapter_inputs))
+    cite_keys = [_normalized_cite_key(cite_key) for cite_key in _ordered_citation_keys(state)]
+    if cite_keys:
+        if _BIBLIOGRAPHY_SENTINEL not in rendered_main:
+            raise RuntimeError(
+                "Unable to inject bibliography references: expected sentinel "
+                f"'{_BIBLIOGRAPHY_SENTINEL}' in {main_path}."
+            )
+        rendered_main = rendered_main.replace(
+            _BIBLIOGRAPHY_SENTINEL,
+            f"\\nocite{{{','.join(cite_keys)}}}\n\n{_BIBLIOGRAPHY_SENTINEL}",
+            1,
+        )
+    main_path.write_text(rendered_main, encoding="utf-8")
 
     _write_bibliography(project_dir, state, warnings)
 
@@ -584,7 +659,7 @@ def export_latex_project(state: dict[str, Any], store: Any, run_id: str) -> str:
 
     shutil.copytree(TEMPLATE_ROOT, project_dir)
     warnings: list[str] = []
-    _write_rendered_files(project_dir, state, warnings)
+    _write_rendered_files(project_dir, state, warnings, store=store)
     zip_path = _write_project_archive(project_dir, store=store, run_id=run_id)
     pdf_path = _compile_project_pdf(project_dir, store=store, run_id=run_id, warnings=warnings)
     state["export_artifacts"] = {

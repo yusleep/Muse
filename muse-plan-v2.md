@@ -191,7 +191,7 @@ def append_audit_log(state: ThesisState, event: dict):
     state["audit_trail"].append(entry)
     
     # 同时写入磁盘上的 JSONL 文件
-    with open("thesis_audit.jsonl", "a") as f:
+    with open("runs/<run_id>/audit.jsonl", "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 ```
 

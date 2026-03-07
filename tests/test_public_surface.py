@@ -19,6 +19,7 @@ class PublicSurfaceTests(unittest.TestCase):
         self.assertIn("overleaf", readme_text)
         self.assertNotIn("docx", readme_text)
         self.assertNotIn("docx", plan_text)
+        self.assertNotIn("thesis_audit.jsonl", plan_text)
 
     def test_package_exports_do_not_expose_docx_helpers(self):
         self.assertTrue({"docx_export", "fill_template"}.isdisjoint(set(muse.__all__)))
