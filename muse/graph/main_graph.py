@@ -55,6 +55,13 @@ def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
         log_dir=log_dir,
         node_name=node_name,
         llm=None,
+        max_retries=getattr(settings, "middleware_retry_max", 2),
+        retry_base_delay=getattr(settings, "middleware_retry_delay", 5.0),
+        context_window=getattr(settings, "middleware_context_window", 128_000),
+        compaction_threshold=getattr(settings, "middleware_compaction_threshold", 0.9),
+        compaction_recent_tokens=getattr(
+            settings, "middleware_compaction_recent_tokens", 20_000
+        ),
     )
     return chain.wrap(node_fn)
 

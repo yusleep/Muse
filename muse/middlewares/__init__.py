@@ -28,6 +28,8 @@ def build_default_chain(
     node_name: str = "unknown",
     llm: Any = None,
     context_window: int = 128_000,
+    compaction_threshold: float = 0.9,
+    compaction_recent_tokens: int = 20_000,
     max_retries: int = 2,
     retry_base_delay: float = 5.0,
 ) -> MiddlewareChain:
@@ -39,7 +41,12 @@ def build_default_chain(
     middlewares.append(RetryMiddleware(max_retries=max_retries, base_delay=retry_base_delay))
     if llm is not None:
         middlewares.append(
-            SummarizationMiddleware(llm=llm, context_window=context_window)
+            SummarizationMiddleware(
+                llm=llm,
+                context_window=context_window,
+                threshold_ratio=compaction_threshold,
+                recent_tokens=compaction_recent_tokens,
+            )
         )
     middlewares.append(DanglingToolCallMiddleware())
     return MiddlewareChain(middlewares)
