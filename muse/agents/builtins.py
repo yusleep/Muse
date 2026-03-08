@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from pathlib import Path
 from typing import Callable
 
@@ -61,23 +62,37 @@ def _coerce_results(results) -> list[dict]:
     return []
 
 
+def _run_async_fn(async_fn, *args, **kwargs):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_fn(*args, **kwargs))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_run_async_in_new_loop, async_fn, args, kwargs)
+        return future.result()
+
+
+def _run_async_in_new_loop(async_fn, args, kwargs):
+    return asyncio.run(async_fn(*args, **kwargs))
+
+
 def build_research_agent(message: str) -> Callable[[], SubagentResult]:
     """Factory for research sub-agent tasks."""
 
-    services = get_services()
-    search_client = getattr(services, "search", None)
-
     def run() -> SubagentResult:
+        services = get_services()
+        search_client = getattr(services, "search", None)
         issues: list[str] = []
         results: list[dict] = []
         if search_client is None:
             issues.append("No search client configured for research sub-agent")
         else:
             try:
-                try:
-                    found, _queries = search_client.search_multi_source(topic=message, discipline="")
-                except TypeError:
-                    found = search_client.search_multi_source(message)
+                found, _queries = search_client.search_multi_source(
+                    topic=message,
+                    discipline="",
+                )
                 results = _coerce_results(found)
             except Exception as exc:  # noqa: BLE001
                 issues.append(f"Research search failed: {exc}")
@@ -106,10 +121,9 @@ def build_research_agent(message: str) -> Callable[[], SubagentResult]:
 def build_writing_agent(message: str) -> Callable[[], SubagentResult]:
     """Factory for writing sub-agent tasks."""
 
-    services = get_services()
-    llm = getattr(services, "llm", None)
-
     def run() -> SubagentResult:
+        services = get_services()
+        llm = getattr(services, "llm", None)
         issues: list[str] = []
         draft = ""
         if llm is None or not hasattr(llm, "text"):
@@ -140,15 +154,14 @@ def build_writing_agent(message: str) -> Callable[[], SubagentResult]:
 def build_bash_agent(message: str) -> Callable[[], SubagentResult]:
     """Factory for bash sub-agent tasks."""
 
-    services = get_services()
-    workspace = _runs_dir_for(services) / "_subagents" / "bash"
-
     def run() -> SubagentResult:
+        services = get_services()
+        workspace = _runs_dir_for(services) / "_subagents" / "bash"
         sandbox = getattr(services, "sandbox", None)
         if sandbox is None:
             sandbox = LocalSandbox(workspace)
 
-        summary = asyncio.run(shell_tool(sandbox, message, timeout=60))
+        summary = _run_async_fn(shell_tool, sandbox, message, timeout=60)
         lowered = summary.lower()
         status = "completed"
         issues: list[str] = []

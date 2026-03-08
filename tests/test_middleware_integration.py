@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import warnings
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -168,6 +169,22 @@ class MiddlewareIntegrationTests(unittest.TestCase):
         self.assertIs(kwargs["llm"], services.llm)
         self.assertIs(kwargs["memory_store"], services.memory_store)
         self.assertEqual(kwargs["subagent_max_concurrent"], 4)
+
+    def test_build_graph_has_no_config_annotation_warnings(self):
+        from muse.graph.main_graph import build_graph
+
+        settings = _make_settings("/tmp/mw-warnings")
+        services = _FakeServices()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            build_graph(settings, services=services)
+
+        messages = [str(item.message) for item in caught]
+        self.assertFalse(
+            any("The 'config' parameter should be typed" in message for message in messages),
+            messages,
+        )
 
 
 if __name__ == "__main__":

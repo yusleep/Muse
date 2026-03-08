@@ -132,4 +132,6 @@
 - 2026-03-08: Final Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `590 passed, 1 skipped, 21 subtests passed`。
 - 2026-03-08: DeerFlow-inspired upgrade 全部 9 个 phase、65 个 task 已完成，`PROGRESS.md` 收口为 100%。
 - 2026-03-08: Post-review wiring fixes 完成：主图现为 chapter/citation/composition 子图统一传入 `settings` 并套用默认 middleware 链；`ask_clarification` / `spawn_subagent` 增加运行时 handler/limit 注入；`Runtime` 初始化 memory/subagent/sandbox 运行时资源；built-in subagents 去掉 stub 模式并改为真实 service-backed 执行。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `595 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Post-review follow-up 完成：built-in subagent 改为在 `run()` 时解析 services，bash agent 支持在已有事件循环中安全执行，并消除了主图 middleware wrapper 的 `RunnableConfig` 注解告警。
+- 2026-03-08: Post-review 全量验证通过：`.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`

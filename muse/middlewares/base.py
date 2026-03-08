@@ -42,6 +42,11 @@ class MiddlewareChain:
         ) -> dict[str, Any]:
             return _run_sync(middlewares, effective_fn, state, config or {})
 
+        wrapped.__annotations__ = {
+            "state": dict[str, Any],
+            "config": RunnableConfig | None,
+            "return": dict[str, Any],
+        }
         return wrapped
 
 
