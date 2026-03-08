@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 6 / 9 phases (45 / 65 tasks)
+- 总进度: 7 / 9 phases (52 / 65 tasks)
 - 当前 Wave: Wave 4 — External Integration
-- 下一步: Phase 4-A Task 1
+- 下一步: Phase 4-B Task 1
 
 ## Wave 1 — Foundation
 
@@ -70,14 +70,14 @@
 
 ## Wave 4 — External Integration
 
-### Phase 4-A: MCP Integration (0/7)
-- [ ] Task 1: Install langchain-mcp-adapters
-- [ ] Task 2: extensions.yaml config + loader
-- [ ] Task 3: OAuthTokenManager
-- [ ] Task 4: MCP tool loader
-- [ ] Task 5: Tool cache
-- [ ] Task 6: ToolRegistry integration
-- [ ] Task 7: Integration test
+### Phase 4-A: MCP Integration (7/7)
+- [x] Task 1: Install langchain-mcp-adapters
+- [x] Task 2: extensions.yaml config + loader
+- [x] Task 3: OAuthTokenManager
+- [x] Task 4: MCP tool loader
+- [x] Task 5: Tool cache
+- [x] Task 6: ToolRegistry integration
+- [x] Task 7: Integration test
 
 ### Phase 4-B: Sandbox Execution (0/7)
 - [ ] Task 1: Sandbox ABC + ExecResult
@@ -122,4 +122,6 @@
 - 2026-03-08: Phase 3 Task 5 完成，新增 built-in research/writing/bash 子代理工厂、tool profile、turn limit 和 blocked tools 配置。
 - 2026-03-08: Phase 3 Task 6 完成，子代理集成测试覆盖 spawn、limit、executor 状态流转与结果收集。
 - 2026-03-08: Wave 3 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`。
+- 2026-03-08: Phase 4-A 完成，新增 `muse.mcp` 包，覆盖 extensions.yaml 解析、OAuth token 管理、MCP tool loader、mtime 热重载缓存与 ToolRegistry bridge。
+- 2026-03-08: Phase 4-A 定向验证通过：`.venv/bin/python -m pytest tests/test_mcp_client.py tests/test_mcp_oauth.py tests/test_mcp_tools.py tests/test_mcp_cache.py tests/test_mcp_registry_bridge.py tests/test_mcp_integration.py -q` → `43 passed`。
 - 测试基线: `.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`
