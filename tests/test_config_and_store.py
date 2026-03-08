@@ -34,6 +34,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIsInstance(settings, Settings)
         self.assertEqual(settings.llm_api_key, "test-key")
         self.assertEqual(settings.llm_model, "gpt-4.1-mini")
+        self.assertIsNone(settings.checkpoint_dir)
 
     def test_load_settings_with_router_json_without_legacy_model_vars(self):
         env = {

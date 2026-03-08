@@ -19,6 +19,12 @@ class Settings:
     openalex_email: str | None
     crossref_mailto: str | None
     refs_dir: str | None  # Resolved absolute path to local reference files, or None
+    checkpoint_dir: str | None = None
+    middleware_retry_max: int = 2
+    middleware_retry_delay: float = 5.0
+    middleware_compaction_threshold: float = 0.9
+    middleware_compaction_recent_tokens: int = 20_000
+    middleware_context_window: int = 128_000
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -42,6 +48,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
 
     llm_base_url = source.get("MUSE_LLM_BASE_URL", "https://api.openai.com/v1").strip()
     runs_dir = source.get("MUSE_RUNS_DIR", "runs").strip() or "runs"
+    checkpoint_dir_raw = source.get("MUSE_CHECKPOINT_DIR", "").strip() or None
+    checkpoint_dir = os.path.abspath(checkpoint_dir_raw) if checkpoint_dir_raw else None
 
     # Resolve local refs directory: CLI/env var takes precedence, then auto-detect ./refs/
     refs_dir_raw = source.get("MUSE_REFS_DIR", "").strip() or None
@@ -51,6 +59,23 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     else:
         candidate = os.path.abspath("refs")
         refs_dir = candidate if os.path.isdir(candidate) else None
+
+    middleware_retry_max = int(
+        source.get("MUSE_MIDDLEWARE_RETRY_MAX", "2").strip() or "2"
+    )
+    middleware_retry_delay = float(
+        source.get("MUSE_MIDDLEWARE_RETRY_DELAY", "5.0").strip() or "5.0"
+    )
+    middleware_compaction_threshold = float(
+        source.get("MUSE_MIDDLEWARE_COMPACTION_THRESHOLD", "0.9").strip() or "0.9"
+    )
+    middleware_compaction_recent_tokens = int(
+        source.get("MUSE_MIDDLEWARE_COMPACTION_RECENT_TOKENS", "20000").strip()
+        or "20000"
+    )
+    middleware_context_window = int(
+        source.get("MUSE_MIDDLEWARE_CONTEXT_WINDOW", "128000").strip() or "128000"
+    )
 
     return Settings(
         llm_api_key=llm_api_key,
@@ -62,6 +87,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         openalex_email=source.get("MUSE_OPENALEX_EMAIL", "").strip() or None,
         crossref_mailto=source.get("MUSE_CROSSREF_MAILTO", "").strip() or None,
         refs_dir=refs_dir,
+        checkpoint_dir=checkpoint_dir,
+        middleware_retry_max=middleware_retry_max,
+        middleware_retry_delay=middleware_retry_delay,
+        middleware_compaction_threshold=middleware_compaction_threshold,
+        middleware_compaction_recent_tokens=middleware_compaction_recent_tokens,
+        middleware_context_window=middleware_context_window,
     )
 
 

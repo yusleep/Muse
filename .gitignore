@@ -6,6 +6,11 @@ __pycache__/
 runs/
 *.Zone.Identifier
 .env
+.venv/
 .worktrees/
 .ralph-tui/
 refs/.index/
+model-router.claude-code.json
+ref/
+refs-papers/
+Archives/

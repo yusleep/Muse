@@ -24,12 +24,32 @@ class PublicSurfaceTests(unittest.TestCase):
     def test_package_exports_do_not_expose_docx_helpers(self):
         self.assertTrue({"docx_export", "fill_template"}.isdisjoint(set(muse.__all__)))
 
+    def test_package_no_longer_exports_legacy_engine_or_orchestrator_symbols(self):
+        legacy = {"EngineContext", "ThesisEngine", "can_advance_to_stage", "gate_export"}
+        self.assertTrue(legacy.isdisjoint(set(muse.__all__)))
+
     def test_docx_export_module_is_removed(self):
         self.assertFalse(Path("muse/docx_export.py").exists())
+
+    def test_legacy_bridge_modules_are_removed(self):
+        for path in (
+            "muse/engine.py",
+            "muse/orchestrator.py",
+            "muse/chapter.py",
+            "muse/stages.py",
+        ):
+            self.assertFalse(Path(path).exists(), path)
 
     def test_gitignore_ignores_ralph_state_directory(self):
         gitignore_text = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn(".ralph-tui/", gitignore_text)
+
+    def test_requirements_include_langgraph_runtime_dependencies(self):
+        requirements = Path("requirements.txt")
+        self.assertTrue(requirements.exists())
+        text = requirements.read_text(encoding="utf-8")
+        self.assertIn("langgraph", text)
+        self.assertIn("langgraph-checkpoint-sqlite", text)
 
 
 if __name__ == "__main__":

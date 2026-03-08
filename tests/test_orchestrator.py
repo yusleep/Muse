@@ -1,11 +1,11 @@
 import unittest
 
-from muse.orchestrator import can_advance_to_stage, gate_export
+from muse.graph.nodes.export import _gate_export
 from muse.schemas import new_thesis_state
 
 
-class OrchestratorGateTests(unittest.TestCase):
-    def test_blocks_export_when_flagged_citations_exist(self):
+class GraphExportGateTests(unittest.TestCase):
+    def test_blocks_export_when_claim_is_explicitly_contradicted(self):
         state = new_thesis_state(
             project_id="p3",
             topic="topic",
@@ -13,7 +13,6 @@ class OrchestratorGateTests(unittest.TestCase):
             language="zh",
             format_standard="GB/T 7714-2015",
         )
-        state["current_stage"] = 5
         state["flagged_citations"] = [
             {
                 "cite_key": "@x",
@@ -23,12 +22,12 @@ class OrchestratorGateTests(unittest.TestCase):
             }
         ]
 
-        allowed, reason = gate_export(state)
+        allowed, reason = _gate_export(state)
 
         self.assertFalse(allowed)
-        self.assertTrue(reason)  # any non-empty reason string is acceptable
+        self.assertTrue(reason)
 
-    def test_allows_export_when_no_flagged_citations(self):
+    def test_allows_export_when_no_flagged_citations_exist(self):
         state = new_thesis_state(
             project_id="p4",
             topic="topic",
@@ -36,14 +35,13 @@ class OrchestratorGateTests(unittest.TestCase):
             language="zh",
             format_standard="GB/T 7714-2015",
         )
-        state["current_stage"] = 5
 
-        allowed, reason = gate_export(state)
+        allowed, reason = _gate_export(state)
 
         self.assertTrue(allowed)
         self.assertEqual(reason, "ok")
 
-    def test_requires_approved_outline_before_stage3(self):
+    def test_allows_export_for_metadata_only_flags(self):
         state = new_thesis_state(
             project_id="p5",
             topic="topic",
@@ -51,14 +49,15 @@ class OrchestratorGateTests(unittest.TestCase):
             language="zh",
             format_standard="GB/T 7714-2015",
         )
-        state["current_stage"] = 2
-        state["outline_json"] = {}
-        state["chapter_plans"] = []
+        state["flagged_citations"] = [
+            {"cite_key": "@x", "reason": "metadata_mismatch", "detail": "metadata_mismatch"},
+            {"cite_key": "@y", "reason": "not_found", "detail": "not_found"},
+        ]
 
-        allowed, reason = can_advance_to_stage(state, 3)
+        allowed, reason = _gate_export(state)
 
-        self.assertFalse(allowed)
-        self.assertIn("outline", reason)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "ok")
 
 
 if __name__ == "__main__":
