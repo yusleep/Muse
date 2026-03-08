@@ -10,6 +10,7 @@ from .clarification_middleware import ClarificationMiddleware
 from .dangling_tool_call import DanglingToolCallMiddleware
 from .logging_middleware import LoggingMiddleware
 from .retry_middleware import RetryMiddleware
+from .subagent_limit_middleware import SubagentLimitMiddleware
 from .summarization_middleware import SummarizationMiddleware
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "Middleware",
     "MiddlewareChain",
     "RetryMiddleware",
+    "SubagentLimitMiddleware",
     "SummarizationMiddleware",
     "build_default_chain",
 ]

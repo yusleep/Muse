@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 5 / 9 phases (39 / 65 tasks)
-- 当前 Wave: Wave 3 — Interaction & Delegation
-- 下一步: Phase 3 Task 1
+- 总进度: 6 / 9 phases (45 / 65 tasks)
+- 当前 Wave: Wave 4 — External Integration
+- 下一步: Phase 4-A Task 1
 
 ## Wave 1 — Foundation
 
@@ -60,13 +60,13 @@
 - [x] Task 4: Upgrade CLI review command
 - [x] Task 5: Integration test
 
-### Phase 3: Subagent Delegation (0/6)
-- [ ] Task 1: SubagentExecutor
-- [ ] Task 2: SubagentResult protocol
-- [ ] Task 3: spawn_subagent tool
-- [ ] Task 4: SubagentLimitMiddleware
-- [ ] Task 5: Built-in agent configs
-- [ ] Task 6: Integration test
+### Phase 3: Subagent Delegation (6/6)
+- [x] Task 1: SubagentExecutor
+- [x] Task 2: SubagentResult protocol
+- [x] Task 3: spawn_subagent tool
+- [x] Task 4: SubagentLimitMiddleware
+- [x] Task 5: Built-in agent configs
+- [x] Task 6: Integration test
 
 ## Wave 4 — External Integration
 
@@ -115,4 +115,11 @@
 - 2026-03-08: Phase 2 Task 3 完成，为 top-level interrupt 节点加入 question/options/context 等结构化字段，并保留布尔 resume 兼容。
 - 2026-03-08: Phase 2 Task 4 完成，CLI `review` 命令支持 `--option`，`_graph_response` 能返回 question/options/context/clarification_type。
 - 2026-03-08: Phase 2 Task 5 完成，structured HITL 集成测试覆盖结构化 payload、option/comment resume 与旧布尔 resume。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Phase 3 Task 1 完成，新增 `muse.agents` 包、最小 `SubagentResult` 骨架与并发/超时安全的 `SubagentExecutor`。
+- 2026-03-08: Phase 3 Task 2 完成，`SubagentResult` 支持默认值、`to_dict`/`from_dict` 与 `summary()`。
+- 2026-03-08: Phase 3 Task 3 完成，新增 `spawn_subagent` 工具、executor 注入点与内建 sub-agent 注册表入口。
+- 2026-03-08: Phase 3 Task 4 完成，新增 `SubagentLimitMiddleware`，可硬截断超额 `spawn_subagent` 调用。
+- 2026-03-08: Phase 3 Task 5 完成，新增 built-in research/writing/bash 子代理工厂、tool profile、turn limit 和 blocked tools 配置。
+- 2026-03-08: Phase 3 Task 6 完成，子代理集成测试覆盖 spawn、limit、executor 状态流转与结果收集。
+- 2026-03-08: Wave 3 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`
