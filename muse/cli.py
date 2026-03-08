@@ -79,6 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--run-id", required=True)
     review.add_argument("--stage", required=True, choices=_STAGE_CHOICES)
     review.add_argument("--approve", action="store_true")
+    review.add_argument(
+        "--option",
+        default=None,
+        help="Selected option label from interrupt choices",
+    )
     review.add_argument("--comment", default="")
     review.set_defaults(func=cmd_review)
 
@@ -116,11 +121,22 @@ def _persist_graph_state(runtime: Runtime, run_id: str, result: dict[str, Any]) 
 
 def _graph_response(result: dict[str, Any], thread_id: str) -> dict[str, Any]:
     if result.get("__interrupt__"):
-        return {
+        interrupt_value = getattr(result["__interrupt__"][0], "value", {})
+        response: dict[str, Any] = {
             "status": "waiting_hitl",
             "stage": _interrupt_stage(result),
             "thread_id": thread_id,
         }
+        if isinstance(interrupt_value, dict):
+            if interrupt_value.get("question"):
+                response["question"] = interrupt_value["question"]
+            if interrupt_value.get("options"):
+                response["options"] = interrupt_value["options"]
+            if interrupt_value.get("context"):
+                response["context"] = interrupt_value["context"]
+            if interrupt_value.get("clarification_type"):
+                response["clarification_type"] = interrupt_value["clarification_type"]
+        return response
     return {
         "status": "completed",
         "thread_id": thread_id,
@@ -352,11 +368,15 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 def cmd_review(args: argparse.Namespace) -> int:
     runtime = _runtime_from_args(args)
+    option = getattr(args, "option", None)
+    approved = bool(args.approve) or (option is not None)
     feedback = {
         "stage": str(args.stage),
-        "approved": bool(args.approve),
+        "approved": approved,
         "comment": args.comment,
     }
+    if option is not None:
+        feedback["option"] = option
     runtime.store.append_hitl_feedback(args.run_id, feedback)
     print(json.dumps({"run_id": args.run_id, "saved": True, "feedback": feedback}, ensure_ascii=False, indent=2))
     return 0
