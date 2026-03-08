@@ -50,6 +50,7 @@ def _load_export_node_builder():
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="muse")
+    parser.add_argument("--config", default=None, help="Path to config.yaml file")
     sub = parser.add_subparsers(dest="command", required=True)
 
     check = sub.add_parser("check", help="Validate provider configuration and connectivity")
@@ -96,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _runtime_from_args(args: argparse.Namespace) -> Runtime:
-    settings = load_settings()
+    settings = load_settings(config_path=getattr(args, "config", None))
     if getattr(args, "refs_dir", None):
         resolved = os.path.abspath(args.refs_dir)
         settings = dataclasses.replace(settings, refs_dir=resolved if os.path.isdir(resolved) else None)

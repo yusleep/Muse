@@ -1,0 +1,68 @@
+# Muse unified configuration
+# Copy to config.yaml and fill in your values.
+# Priority: CLI args > env vars > config.yaml > defaults
+
+# ---- auth profiles ----
+auth:
+  profiles:
+    anthropic_key:
+      api_key_env: ANTHROPIC_API_KEY
+    # codex_oauth:
+    #   type: oauth
+    #   oauth_provider: codex
+    #   auth_file: ~/.codex/auth.json
+    #   token_path: tokens.access_token
+    # third_party_key:
+    #   api_key_env: NHH_API_KEY
+
+# ---- LLM providers ----
+providers:
+  anthropic:
+    base_url: https://api.anthropic.com
+    api_style: anthropic
+    auth: anthropic_key
+    models:
+      anthropic/opus:   { model: claude-opus-4-6 }
+      anthropic/sonnet: { model: claude-sonnet-4-6 }
+      anthropic/haiku:  { model: claude-haiku-4-5-20251001 }
+
+  # codex_plus:
+  #   base_url: https://chatgpt.com/backend-api
+  #   api_style: responses
+  #   codex_oauth: true
+  #   auth: codex_oauth
+  #   models:
+  #     codex_plus/default:   { model: gpt-5.3-codex }
+  #     codex_plus/reasoning: { model: gpt-5.3-codex }
+  #     codex_plus/fallback:  { model: gpt-5.1-codex }
+
+# ---- route table (task -> model + fallbacks) ----
+routes:
+  default:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  writing:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  outline:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  review:    { primary: anthropic/sonnet, fallbacks: [anthropic/haiku] }
+  reasoning: { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  polish:    { primary: anthropic/sonnet, fallbacks: [anthropic/haiku] }
+
+aliases: {}
+
+# ---- academic search ----
+search:
+  semantic_scholar_api_key: ${SEMANTIC_SCHOLAR_API_KEY}
+  openalex_email: user@example.com
+  crossref_mailto: user@example.com
+
+# ---- middleware ----
+middleware:
+  retry_max: 2
+  retry_delay: 5.0
+  compaction_threshold: 0.9
+  compaction_recent_tokens: 20000
+  context_window: 128000
+
+# ---- paths ----
+paths:
+  runs_dir: runs
+  checkpoint_dir: null
+  refs_dir: null
