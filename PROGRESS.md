@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
-- 状态: 进行中
-- 总进度: 8 / 9 phases (59 / 65 tasks)
-- 当前 Wave: Wave 5 — Memory
-- 下一步: Phase 5 Task 1
+- 状态: 已完成
+- 总进度: 9 / 9 phases (65 / 65 tasks)
+- 当前 Wave: 全部完成
+- 下一步: 无（DeerFlow-inspired upgrade 已完成）
 
 ## Wave 1 — Foundation
 
@@ -90,13 +90,13 @@
 
 ## Wave 5 — Memory
 
-### Phase 5: Memory System (0/6)
-- [ ] Task 1: MemoryEntry + MemoryStore
-- [ ] Task 2: Memory formatting
-- [ ] Task 3: MemoryMiddleware
-- [ ] Task 4: Confidence lifecycle
-- [ ] Task 5: Extraction triggers
-- [ ] Task 6: Integration test
+### Phase 5: Memory System (6/6)
+- [x] Task 1: MemoryEntry + MemoryStore
+- [x] Task 2: Memory formatting
+- [x] Task 3: MemoryMiddleware
+- [x] Task 4: Confidence lifecycle
+- [x] Task 5: Extraction triggers
+- [x] Task 6: Integration test
 
 ## Notes
 
@@ -127,4 +127,8 @@
 - 2026-03-08: Phase 4-B 完成，新增 `muse.sandbox` 包，覆盖本地/容器沙箱、VFS 映射、sandbox tools 与本地端到端集成测试。
 - 2026-03-08: Phase 4-B 定向验证通过：`.venv/bin/python -m pytest tests/test_sandbox_base.py tests/test_sandbox_local.py tests/test_sandbox_docker.py tests/test_sandbox_vfs.py tests/test_sandbox_tools.py tests/test_sandbox_integration.py -q -m 'not docker'` → `69 passed, 1 deselected`。
 - 2026-03-08: Wave 4 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `508 passed, 1 skipped, 21 subtests passed`。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `508 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Phase 5 完成，新增 `muse.memory` 包，覆盖 SQLite memory store、prompt formatting、MemoryMiddleware、confidence lifecycle、memory extractors 与集成测试。
+- 2026-03-08: Phase 5 定向验证通过：`.venv/bin/python -m pytest tests/test_memory_store.py tests/test_memory_prompt.py tests/test_memory_middleware.py tests/test_memory_lifecycle.py tests/test_memory_extractors.py tests/test_memory_integration.py tests/test_middleware_integration.py -q` → `85 passed`。
+- 2026-03-08: Final Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `590 passed, 1 skipped, 21 subtests passed`。
+- 2026-03-08: DeerFlow-inspired upgrade 全部 9 个 phase、65 个 task 已完成，`PROGRESS.md` 收口为 100%。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `590 passed, 1 skipped, 21 subtests passed`
