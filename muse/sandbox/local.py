@@ -27,6 +27,10 @@ class LocalSandbox(Sandbox):
     def workspace(self) -> Path:
         return self._workspace
 
+    @property
+    def outputs_dir(self) -> Path:
+        return self._workspace / "outputs"
+
     async def exec(
         self,
         command: str,

@@ -43,6 +43,10 @@ class DockerSandbox(Sandbox):
         return self._workspace
 
     @property
+    def outputs_dir(self) -> Path:
+        return self._outputs_dir
+
+    @property
     def container_id(self) -> str | None:
         return self._container_id
 
