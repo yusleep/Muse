@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from muse.config import Settings
 
@@ -59,6 +60,51 @@ class _Services:
 
 
 class HitlInterruptTests(unittest.TestCase):
+    def test_interrupt_payload_contains_structured_fields(self):
+        from muse.graph.nodes.review import build_interrupt_node
+
+        node = build_interrupt_node("research", auto_approve=False)
+        with patch("muse.graph.nodes.review.interrupt", side_effect=lambda payload: payload):
+            result = node(
+                {
+                    "project_id": "run-structured",
+                    "references": [{"ref_id": "@a"}],
+                    "search_queries": ["graph workflow"],
+                }
+            )
+
+        payload = result["review_feedback"][0]
+        self.assertIsInstance(payload["question"], str)
+        self.assertIsInstance(payload["clarification_type"], str)
+        self.assertIsInstance(payload["options"], list)
+
+    def test_interrupt_backward_compat_bool_resume(self):
+        from muse.graph.nodes.review import build_interrupt_node
+
+        node = build_interrupt_node("outline", auto_approve=False)
+        with patch("muse.graph.nodes.review.interrupt", return_value=True):
+            result = node({"project_id": "run-bool", "chapter_plans": []})
+
+        feedback = result["review_feedback"][0]
+        self.assertEqual(feedback["stage"], "outline")
+        self.assertTrue(feedback["approved"])
+
+    def test_interrupt_payload_stage_specific_options(self):
+        from muse.graph.nodes.review import build_interrupt_node
+
+        node = build_interrupt_node("research", auto_approve=False)
+        with patch("muse.graph.nodes.review.interrupt", side_effect=lambda payload: payload):
+            result = node(
+                {
+                    "project_id": "run-options",
+                    "references": [{"ref_id": "@a"}],
+                    "search_queries": ["graph workflow"],
+                }
+            )
+
+        labels = {option["label"] for option in result["review_feedback"][0]["options"]}
+        self.assertEqual(labels, {"continue", "add_keywords", "add_manually"})
+
     def test_graph_interrupts_after_search_and_resume_reaches_outline_interrupt(self):
         from muse.graph.launcher import build_graph, invoke
 
