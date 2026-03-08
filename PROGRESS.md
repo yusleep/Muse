@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 4 / 9 phases (35 / 65 tasks)
+- 总进度: 4 / 9 phases (36 / 65 tasks)
 - 当前 Wave: Wave 3 — Interaction & Delegation
-- 下一步: Phase 2 Task 2
+- 下一步: Phase 2 Task 3
 
 ## Wave 1 — Foundation
 
@@ -53,9 +53,9 @@
 
 ## Wave 3 — Interaction & Delegation
 
-### Phase 2: Structured HITL (1/5)
+### Phase 2: Structured HITL (2/5)
 - [x] Task 1: ask_clarification tool
-- [ ] Task 2: ClarificationMiddleware
+- [x] Task 2: ClarificationMiddleware
 - [ ] Task 3: Upgrade interrupt nodes
 - [ ] Task 4: Upgrade CLI review command
 - [ ] Task 5: Integration test
@@ -111,4 +111,5 @@
 - 2026-03-08: Phase 1 Task 12 完成，新增 dual-mode/fallback 集成测试，Wave 2 进入全量回归验证。
 - 2026-03-08: Wave 2 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`。
 - 2026-03-08: Phase 2 Task 1 完成，新增 `ask_clarification` 工具及结构化 schema。
+- 2026-03-08: Phase 2 Task 2 完成，新增 ClarificationMiddleware 并导出到 middleware 公共表面。
 - 测试基线: `.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`

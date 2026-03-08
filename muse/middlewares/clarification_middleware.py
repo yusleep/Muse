@@ -1,0 +1,50 @@
+"""Middleware that converts ask_clarification tool calls into HITL interrupts."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from langgraph.types import interrupt
+
+
+_TOOL_NAME = "ask_clarification"
+
+
+class ClarificationMiddleware:
+    """Intercept structured clarification tool calls and fire LangGraph interrupts."""
+
+    def should_intercept(self, tool_calls: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Return the first matching clarification tool call, if present."""
+
+        for tool_call in tool_calls:
+            if tool_call.get("name") == _TOOL_NAME:
+                return tool_call
+        return None
+
+    def build_interrupt_payload(self, tool_call: dict[str, Any]) -> dict[str, Any]:
+        """Build the structured HITL payload from a tool call."""
+
+        args = tool_call.get("args", {})
+        return {
+            "question": args.get("question", ""),
+            "clarification_type": args.get("clarification_type", "missing_info"),
+            "context": args.get("context"),
+            "options": args.get("options"),
+            "tool_call_id": tool_call.get("id", ""),
+            "source": _TOOL_NAME,
+        }
+
+    def fire_interrupt(self, tool_call: dict[str, Any]) -> dict[str, Any]:
+        """Trigger a LangGraph interrupt carrying the structured payload."""
+
+        payload = self.build_interrupt_payload(tool_call)
+        return interrupt(payload)
+
+    def build_tool_message(self, *, tool_call_id: str, human_response: str) -> dict[str, Any]:
+        """Convert a human response into a ToolMessage-compatible payload."""
+
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": human_response,
+        }
