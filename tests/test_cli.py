@@ -37,14 +37,15 @@ class CliSurfaceTests(unittest.TestCase):
     def test_output_format_still_accepts_markdown_latex_and_pdf(self):
         commands = [
             ["run", "--topic", "Test", "--output-format", "markdown"],
-            ["resume", "--run-id", "r1", "--output-format", "latex"],
+            ["resume", "--run-id", "r1"],
             ["export", "--run-id", "r1", "--output-format", "pdf"],
         ]
 
         for argv in commands:
             with self.subTest(argv=argv):
                 args = self.parser.parse_args(argv)
-                self.assertIn(args.output_format, {"markdown", "latex", "pdf"})
+                if hasattr(args, "output_format"):
+                    self.assertIn(args.output_format, {"markdown", "latex", "pdf"})
                 self.assertFalse(hasattr(args, "template"))
 
 

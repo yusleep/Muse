@@ -1,4 +1,4 @@
-"""Chapter-level review and iteration helpers."""
+"""Chapter review state helpers shared by graph nodes and legacy shims."""
 
 from __future__ import annotations
 
@@ -6,12 +6,7 @@ from typing import Mapping
 
 
 def should_iterate(state: Mapping[str, object], threshold: int = 4) -> str:
-    """Route chapter flow to either `revise` or `done`.
-
-    Returns:
-        "done": scores meet threshold or iteration cap reached.
-        "revise": at least one score is below threshold and budget remains.
-    """
+    """Route chapter flow to either `revise` or `done`."""
 
     raw_scores = state.get("quality_scores", {})
     if not isinstance(raw_scores, dict):
@@ -20,7 +15,7 @@ def should_iterate(state: Mapping[str, object], threshold: int = 4) -> str:
     numeric_scores = [int(value) for value in raw_scores.values() if isinstance(value, (int, float))]
     min_score = min(numeric_scores) if numeric_scores else 0
 
-    current_iteration = int(state.get("current_iteration", 0))
+    current_iteration = int(state.get("current_iteration", state.get("iteration", 0)))
     max_iterations = int(state.get("max_iterations", 3))
 
     if min_score >= threshold:
@@ -79,3 +74,4 @@ def apply_chapter_review(
 
     route = should_iterate(state, threshold=score_threshold)
     return route, state
+

@@ -19,6 +19,7 @@ class Settings:
     openalex_email: str | None
     crossref_mailto: str | None
     refs_dir: str | None  # Resolved absolute path to local reference files, or None
+    checkpoint_dir: str | None = None
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -42,6 +43,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
 
     llm_base_url = source.get("MUSE_LLM_BASE_URL", "https://api.openai.com/v1").strip()
     runs_dir = source.get("MUSE_RUNS_DIR", "runs").strip() or "runs"
+    checkpoint_dir_raw = source.get("MUSE_CHECKPOINT_DIR", "").strip() or None
+    checkpoint_dir = os.path.abspath(checkpoint_dir_raw) if checkpoint_dir_raw else None
 
     # Resolve local refs directory: CLI/env var takes precedence, then auto-detect ./refs/
     refs_dir_raw = source.get("MUSE_REFS_DIR", "").strip() or None
@@ -62,6 +65,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         openalex_email=source.get("MUSE_OPENALEX_EMAIL", "").strip() or None,
         crossref_mailto=source.get("MUSE_CROSSREF_MAILTO", "").strip() or None,
         refs_dir=refs_dir,
+        checkpoint_dir=checkpoint_dir,
     )
 
 

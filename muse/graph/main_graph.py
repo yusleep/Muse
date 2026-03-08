@@ -1,0 +1,87 @@
+"""Top-level Muse LangGraph definition."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from langgraph.graph import END, START, StateGraph
+
+from muse.config import Settings
+from muse.graph.nodes import (
+    build_export_node,
+    build_initialize_node,
+    build_interrupt_node,
+    build_merge_chapters_node,
+    build_outline_node,
+    build_polish_node,
+    build_search_node,
+)
+from muse.graph.nodes.draft import fan_out_chapters
+from muse.graph.state import MuseState
+from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
+from muse.graph.subgraphs.citation import build_citation_subgraph_node
+from muse.graph.subgraphs.composition import build_composition_subgraph_node
+
+
+class _NullServices:
+    def __init__(self) -> None:
+        self.local_refs = []
+        self.rag_index = None
+        self.search = None
+        self.llm = None
+
+
+def _default_settings() -> Settings:
+    return Settings(
+        llm_api_key="",
+        llm_base_url="https://api.openai.com/v1",
+        llm_model="router/default",
+        model_router_config={},
+        runs_dir="runs",
+        semantic_scholar_api_key=None,
+        openalex_email=None,
+        crossref_mailto=None,
+        refs_dir=None,
+        checkpoint_dir=None,
+    )
+
+
+def build_graph(
+    settings: Settings | None = None,
+    *,
+    services: Any | None = None,
+    checkpointer: Any | None = None,
+    auto_approve: bool = True,
+):
+    settings = settings or _default_settings()
+    services = services or _NullServices()
+
+    builder = StateGraph(MuseState)
+    builder.add_node("initialize", build_initialize_node(settings, services))
+    builder.add_node("search", build_search_node(settings, services))
+    builder.add_node("review_refs", build_interrupt_node("research", auto_approve=auto_approve))
+    builder.add_node("outline", build_outline_node(settings, services))
+    builder.add_node("approve_outline", build_interrupt_node("outline", auto_approve=auto_approve))
+    builder.add_node("chapter_subgraph", build_chapter_subgraph_node(services=services))
+    builder.add_node("merge_chapters", build_merge_chapters_node(settings, services))
+    builder.add_node("review_draft", build_interrupt_node("draft", auto_approve=auto_approve))
+    builder.add_node("citation_subgraph", build_citation_subgraph_node(services=services))
+    builder.add_node("polish", build_polish_node(services))
+    builder.add_node("composition_subgraph", build_composition_subgraph_node())
+    builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
+    builder.add_node("export", build_export_node(settings))
+    builder.add_edge(START, "initialize")
+    builder.add_edge("initialize", "search")
+    builder.add_edge("search", "review_refs")
+    builder.add_edge("review_refs", "outline")
+    builder.add_edge("outline", "approve_outline")
+    builder.add_conditional_edges("approve_outline", fan_out_chapters, ["chapter_subgraph"])
+    builder.add_edge("chapter_subgraph", "merge_chapters")
+    builder.add_edge("merge_chapters", "review_draft")
+    builder.add_edge("review_draft", "citation_subgraph")
+    builder.add_edge("citation_subgraph", "polish")
+    builder.add_edge("polish", "composition_subgraph")
+    builder.add_edge("composition_subgraph", "approve_final")
+    builder.add_edge("approve_final", "export")
+    builder.add_edge("export", END)
+    return builder.compile(checkpointer=checkpointer)

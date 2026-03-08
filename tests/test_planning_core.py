@@ -1,7 +1,7 @@
 import unittest
 
+from muse.graph.helpers.review_state import should_iterate
 from muse.planning import plan_subtasks
-from muse.chapter import should_iterate
 
 
 class PlanSubtasksTests(unittest.TestCase):

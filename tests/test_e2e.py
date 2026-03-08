@@ -15,8 +15,8 @@ import tempfile
 import unittest
 
 from muse.config import Settings
+from muse.graph.launcher import invoke as invoke_graph
 from muse.runtime import Runtime
-from muse.schemas import new_thesis_state
 
 
 # ---------------------------------------------------------------------------
@@ -138,38 +138,31 @@ class E2EPipelineTests(unittest.TestCase):
         return runtime
 
     def test_full_pipeline_produces_markdown_output(self):
-        """All 6 stages complete and output/thesis.md is written."""
+        """Graph-native full flow completes and writes output/thesis.md."""
         with tempfile.TemporaryDirectory() as tmp:
             runtime = self._make_runtime(tmp)
             run_id = runtime.store.create_run(topic="Byzantine Fault Tolerance")
 
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="Byzantine Fault Tolerance",
-                discipline="Computer Science",
-                language="zh",
-                format_standard="GB/T 7714-2015",
+            graph = runtime.build_graph(thread_id=run_id, auto_approve=True)
+            result = invoke_graph(
+                graph,
+                {
+                    "project_id": run_id,
+                    "topic": "Byzantine Fault Tolerance",
+                    "discipline": "Computer Science",
+                    "language": "zh",
+                    "format_standard": "GB/T 7714-2015",
+                    "output_format": "markdown",
+                },
+                thread_id=run_id,
             )
-            runtime.store.save_state(run_id, state)
 
-            engine = runtime.build_engine(run_id=run_id, output_format="markdown")
-            result = engine.run(run_id=run_id, start_stage=1, auto_approve=True)
+            self.assertTrue(len(result["references"]) >= 1)
+            self.assertTrue(len(result["chapter_plans"]) >= 1)
+            self.assertTrue(len(result["paper_package"]["chapter_results"]) >= 1)
+            self.assertFalse(result["flagged_citations"])
 
-            # Pipeline ran to completion
-            self.assertEqual(result["status"], "completed")
-            self.assertEqual(result["stage"], 6)
-
-            # State persisted correctly
-            final = runtime.store.load_state(run_id)
-            self.assertEqual(final["stage1_status"], "hitl_review")
-            self.assertEqual(final["stage6_status"], "completed")
-            self.assertTrue(len(final["references"]) >= 1)
-            self.assertTrue(len(final["chapter_plans"]) >= 1)
-            self.assertTrue(len(final["chapter_results"]) >= 1)
-            self.assertFalse(final["flagged_citations"])   # no citations → nothing flagged
-
-            # Output file exists and contains written content
-            output_path = final["output_filepath"]
+            output_path = result["output_filepath"]
             self.assertTrue(os.path.isfile(output_path), f"Missing: {output_path}")
             content = open(output_path, encoding="utf-8").read()
             self.assertIn("Minimal e2e test content", content)
@@ -180,21 +173,22 @@ class E2EPipelineTests(unittest.TestCase):
             runtime = self._make_runtime(tmp)
             run_id = runtime.store.create_run(topic="Test")
 
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="Test",
-                discipline="CS",
-                language="zh",
-                format_standard="GB/T 7714-2015",
+            graph = runtime.build_graph(thread_id=run_id, auto_approve=True)
+            result = invoke_graph(
+                graph,
+                {
+                    "project_id": run_id,
+                    "topic": "Test",
+                    "discipline": "CS",
+                    "language": "zh",
+                    "format_standard": "GB/T 7714-2015",
+                    "output_format": "markdown",
+                },
+                thread_id=run_id,
             )
-            runtime.store.save_state(run_id, state)
 
-            engine = runtime.build_engine(run_id=run_id, output_format="markdown")
-            engine.run(run_id=run_id, start_stage=1, auto_approve=True)
-
-            final = runtime.store.load_state(run_id)
-            self.assertEqual(final.get("local_refs_count", 0), 0)
-            self.assertFalse(final.get("rag_enabled", True))
+            self.assertEqual(result.get("local_refs_count", 0), 0)
+            self.assertFalse(result.get("rag_enabled", True))
 
     def test_pipeline_with_local_refs_sets_rag_enabled(self):
         """With a refs_dir containing .md files, local_refs_count > 0 and rag_enabled = True."""
@@ -225,16 +219,20 @@ class E2EPipelineTests(unittest.TestCase):
             self.assertGreater(len(runtime.local_refs), 0)
 
             run_id = runtime.store.create_run(topic="BFT")
-            state = new_thesis_state(
-                project_id=run_id, topic="BFT", discipline="CS",
-                language="zh", format_standard="GB/T 7714-2015",
+            graph = runtime.build_graph(thread_id=run_id, auto_approve=True)
+            final = invoke_graph(
+                graph,
+                {
+                    "project_id": run_id,
+                    "topic": "BFT",
+                    "discipline": "CS",
+                    "language": "zh",
+                    "format_standard": "GB/T 7714-2015",
+                    "output_format": "markdown",
+                },
+                thread_id=run_id,
             )
-            runtime.store.save_state(run_id, state)
 
-            engine = runtime.build_engine(run_id=run_id, output_format="markdown")
-            engine.run(run_id=run_id, start_stage=1, auto_approve=True)
-
-            final = runtime.store.load_state(run_id)
             self.assertGreater(final.get("local_refs_count", 0), 0)
             # Local refs appear first in references list
             self.assertEqual(final["references"][0]["source"], "local")

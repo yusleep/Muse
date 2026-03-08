@@ -1,34 +1,10 @@
-"""State schema helpers for Muse."""
+"""Run-state schema helpers for Muse."""
 
 from __future__ import annotations
 
 from typing import Any, TypedDict
 
-
-class ReferenceRecord(TypedDict):
-    ref_id: str
-    title: str
-    authors: list[str]
-    year: int | None
-    doi: str | None
-    venue: str | None
-    abstract: str | None
-    source: str
-    verified_metadata: bool
-
-
-class CitationUse(TypedDict):
-    cite_key: str
-    claim_id: str
-    chapter_id: str
-    subtask_id: str
-
-
-class FlaggedCitation(TypedDict):
-    cite_key: str
-    reason: str
-    claim_id: str | None
-    detail: str | None
+from .reference import CitationUse, FlaggedCitation, ReferenceRecord
 
 
 class ThesisState(TypedDict):
@@ -54,8 +30,8 @@ class ThesisState(TypedDict):
     final_text: str
     output_format: str
     output_filepath: str
-    local_refs_count: int  # Number of local reference files ingested
-    rag_enabled: bool  # True if RAG index was successfully built
+    local_refs_count: int
+    rag_enabled: bool
     stage1_status: str
     stage2_status: str
     stage3_status: str
@@ -139,8 +115,6 @@ def new_thesis_state(
     language: str,
     format_standard: str,
 ) -> ThesisState:
-    """Create an initialized ThesisState dictionary."""
-
     return ThesisState(
         project_id=project_id,
         topic=topic,
@@ -178,16 +152,12 @@ def new_thesis_state(
 
 
 def hydrate_thesis_state(state: dict[str, Any]) -> dict[str, Any]:
-    """Backfill missing fields for older checkpoint states."""
-
     for key, default in _DEFAULT_OPTIONAL_FIELDS.items():
         state.setdefault(key, default.copy() if isinstance(default, (dict, list)) else default)
     return state
 
 
 def validate_thesis_state(state: dict[str, Any]) -> None:
-    """Validate the minimum runtime contract for ThesisState."""
-
     missing = _REQUIRED_KEYS - set(state.keys())
     if missing:
         raise ValueError(f"missing required state keys: {sorted(missing)}")

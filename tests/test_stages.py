@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from muse.schemas import new_thesis_state
-from muse.stages import stage1_literature, stage6_export
-from muse.store import RunStore
+from muse.config import Settings
+from muse.graph.nodes.export import build_export_node
+from muse.graph.nodes.search import build_search_node
 
 
 class _FakeSearchClient:
@@ -25,119 +25,136 @@ class _FakeSearchClient:
         ], [f"{topic} {discipline}"]
 
 
-class StageTests(unittest.TestCase):
-    def test_stage1_populates_references_and_waits_for_hitl(self):
-        state = new_thesis_state(
-            project_id="r1",
-            topic="topic",
-            discipline="cs",
-            language="zh",
-            format_standard="GB/T 7714-2015",
+class _Services:
+    def __init__(self):
+        self.search = _FakeSearchClient()
+        self.llm = None
+        self.local_refs = []
+        self.rag_index = None
+
+
+class GraphEntryNodeTests(unittest.TestCase):
+    def _make_settings(self, runs_dir: str) -> Settings:
+        return Settings(
+            llm_api_key="x",
+            llm_base_url="http://localhost",
+            llm_model="stub",
+            model_router_config={},
+            runs_dir=runs_dir,
+            semantic_scholar_api_key=None,
+            openalex_email=None,
+            crossref_mailto=None,
+            refs_dir=None,
+            checkpoint_dir=None,
         )
-        status = stage1_literature(state, _FakeSearchClient())
 
-        self.assertEqual(status, "hitl")
-        self.assertEqual(len(state["references"]), 1)
-        self.assertTrue(state["search_queries"])
+    def test_search_node_populates_references_and_summary(self):
+        node = build_search_node(self._make_settings("runs"), _Services())
+        result = node({"topic": "topic", "discipline": "cs"})
 
-    def test_stage6_blocks_when_flagged_citations_exist(self):
+        self.assertEqual(len(result["references"]), 1)
+        self.assertTrue(result["search_queries"])
+        self.assertIn("Paper 1", result["literature_summary"])
+
+    def test_export_node_blocks_when_flagged_citations_are_contradictions(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
+            node = build_export_node(self._make_settings(tmp))
+            result = node(
+                {
+                    "project_id": "run-blocked",
+                    "paper_package": {"chapter_results": []},
+                    "final_text": "text",
+                    "flagged_citations": [
+                        {
+                            "cite_key": "@x",
+                            "reason": "unsupported_claim",
+                            "detail": "entailment result=contradiction",
+                        }
+                    ],
+                    "references": [],
+                    "citation_uses": [],
+                    "output_format": "markdown",
+                }
             )
-            state["flagged_citations"] = [{"cite_key": "@x", "reason": "unsupported_claim", "detail": "entailment result=contradiction"}]
-            state["final_text"] = "text"
 
-            status = stage6_export(state, store, run_id, output_format="markdown")
-            self.assertEqual(status, "blocked")
+            self.assertEqual(result["output_filepath"], "")
 
-    def test_stage6_writes_markdown_artifact(self):
+    def test_export_node_writes_markdown_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
+            node = build_export_node(self._make_settings(tmp))
+            result = node(
+                {
+                    "project_id": "run-markdown",
+                    "paper_package": {"chapter_results": []},
+                    "final_text": "# Title\n\ncontent",
+                    "flagged_citations": [],
+                    "references": [],
+                    "citation_uses": [],
+                    "output_format": "markdown",
+                }
             )
-            state["final_text"] = "# Title\n\ncontent"
-            status = stage6_export(state, store, run_id, output_format="markdown")
 
-            self.assertEqual(status, "done")
-            output_path = state["output_filepath"]
-            self.assertTrue(os.path.exists(output_path))
-            with open(output_path, "r", encoding="utf-8") as f:
-                self.assertIn("content", f.read())
+            self.assertTrue(os.path.exists(result["output_filepath"]))
+            with open(result["output_filepath"], "r", encoding="utf-8") as handle:
+                self.assertIn("content", handle.read())
 
-    def test_stage6_writes_latex_project_artifact(self):
+    def test_export_node_writes_latex_project_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
+            node = build_export_node(self._make_settings(tmp))
+            result = node(
+                {
+                    "project_id": "run-latex",
+                    "paper_package": {"chapter_results": []},
+                    "final_text": "# Title\n\ncontent",
+                    "flagged_citations": [],
+                    "references": [],
+                    "citation_uses": [],
+                    "output_format": "latex",
+                }
             )
-            state["final_text"] = "# Title\n\ncontent"
 
-            status = stage6_export(state, store, run_id, output_format="latex")
-
-            self.assertEqual(status, "done")
-            self.assertTrue(os.path.isdir(state["output_filepath"]))
-            self.assertTrue(os.path.exists(os.path.join(state["output_filepath"], "main.tex")))
+            self.assertTrue(os.path.isdir(result["output_filepath"]))
+            self.assertTrue(os.path.exists(os.path.join(result["output_filepath"], "main.tex")))
             for dirname in ("Bib", "Chapter", "config", "resources"):
-                self.assertTrue(os.path.isdir(os.path.join(state["output_filepath"], dirname)))
-            markdown_path = os.path.join(tmp, run_id, "output", "thesis.md")
-            self.assertTrue(os.path.exists(markdown_path))
+                self.assertTrue(os.path.isdir(os.path.join(result["output_filepath"], dirname)))
 
-    def test_stage6_latex_export_records_archive_and_warning_artifacts(self):
+    def test_export_node_latex_export_records_archive_and_warning_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
-            )
-            state["final_text"] = "# Title\n\ncontent"
-
+            node = build_export_node(self._make_settings(tmp))
             with patch("muse.latex_export.shutil.which", return_value=None):
-                status = stage6_export(state, store, run_id, output_format="latex")
+                result = node(
+                    {
+                        "project_id": "run-latex-warning",
+                        "paper_package": {"chapter_results": []},
+                        "final_text": "# Title\n\ncontent",
+                        "flagged_citations": [],
+                        "references": [],
+                        "citation_uses": [],
+                        "output_format": "latex",
+                    }
+                )
 
-            self.assertEqual(status, "done")
-            self.assertTrue(os.path.isdir(state["output_filepath"]))
-            self.assertTrue(os.path.isfile(state["export_artifacts"]["latex_zip_path"]))
-            self.assertIsNone(state["export_artifacts"]["pdf_path"])
-            self.assertTrue(any("latexmk or xelatex" in warning for warning in state["export_warnings"]))
+            self.assertTrue(os.path.isdir(result["output_filepath"]))
+            self.assertTrue(os.path.isfile(result["export_artifacts"]["latex_zip_path"]))
+            self.assertIsNone(result["export_artifacts"]["pdf_path"])
+            self.assertTrue(any("latexmk or xelatex" in warning for warning in result["export_warnings"]))
 
-    def test_stage6_rejects_docx_export_format(self):
+    def test_export_node_rejects_docx_export_format(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
-            )
-            state["final_text"] = "# Title\n\ncontent"
-
-            with patch("muse.stages._pandoc_export") as pandoc_export:
+            node = build_export_node(self._make_settings(tmp))
+            with patch("muse.graph.nodes.export._pandoc_export") as pandoc_export:
                 with self.assertRaises(ValueError):
-                    stage6_export(state, store, run_id, output_format="docx")
+                    node(
+                        {
+                            "project_id": "run-docx",
+                            "paper_package": {"chapter_results": []},
+                            "final_text": "# Title\n\ncontent",
+                            "flagged_citations": [],
+                            "references": [],
+                            "citation_uses": [],
+                            "output_format": "docx",
+                        }
+                    )
 
             pandoc_export.assert_not_called()
 

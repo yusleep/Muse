@@ -1,6 +1,6 @@
 import unittest
 
-from muse.chapter import build_revision_instructions
+from muse.graph.helpers.review_state import build_revision_instructions
 from muse.schemas import hydrate_thesis_state, new_thesis_state, validate_thesis_state
 
 

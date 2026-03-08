@@ -5,13 +5,11 @@ import json
 import unittest
 from unittest.mock import MagicMock
 
+from muse.graph.nodes.outline import _analyze_topic, build_outline_node
+from muse.graph.nodes.polish import _run_polish
+from muse.graph.nodes.search import _generate_search_queries, build_search_node
 from muse.schemas import new_thesis_state
-from muse.stages import (
-    _generate_search_queries,
-    stage1_literature,
-    stage2_outline,
-    stage5_polish,
-)
+from muse.graph.helpers.draft_support import write_subtasks
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +64,19 @@ class _FakeLLMClient:
         return {}
 
 
+class _SearchServices:
+    def __init__(self, *, search=None, llm=None, local_refs=None, rag_index=None):
+        self.search = search or _FakeSearchClient()
+        self.llm = llm
+        self.local_refs = list(local_refs or [])
+        self.rag_index = rag_index
+
+
+class _OutlineServices:
+    def __init__(self, llm):
+        self.llm = llm
+
+
 # ---------------------------------------------------------------------------
 # Stage 1 tests
 # ---------------------------------------------------------------------------
@@ -93,10 +104,10 @@ class TestStage1LocalRefs(unittest.TestCase):
         state = _make_state()
         search = _FakeSearchClient()
         local = self._make_local_refs(2)
+        node = build_search_node(None, _SearchServices(search=search, local_refs=local))
+        result = node({"topic": state["topic"], "discipline": state["discipline"]})
 
-        stage1_literature(state, search, local_refs=local)
-
-        refs = state["references"]
+        refs = result["references"]
         # Local refs come first
         self.assertEqual(refs[0]["ref_id"], "@local_0")
         self.assertEqual(refs[1]["ref_id"], "@local_1")
@@ -113,10 +124,10 @@ class TestStage1LocalRefs(unittest.TestCase):
         ]
         search = _FakeSearchClient(refs=overlapping_online)
         local = self._make_local_refs(1)
+        node = build_search_node(None, _SearchServices(search=search, local_refs=local))
+        result = node({"topic": state["topic"], "discipline": state["discipline"]})
 
-        stage1_literature(state, search, local_refs=local)
-
-        refs = state["references"]
+        refs = result["references"]
         # Only one entry with ref_id @local_0 (the local one)
         ids = [r["ref_id"] for r in refs]
         self.assertEqual(ids.count("@local_0"), 1)
@@ -125,16 +136,17 @@ class TestStage1LocalRefs(unittest.TestCase):
     def test_no_local_refs_uses_online_only(self):
         state = _make_state()
         search = _FakeSearchClient()
-        stage1_literature(state, search)
-        self.assertEqual(len(state["references"]), 1)
-        self.assertEqual(state["references"][0]["ref_id"], "@online1")
+        node = build_search_node(None, _SearchServices(search=search))
+        result = node({"topic": state["topic"], "discipline": state["discipline"]})
+        self.assertEqual(len(result["references"]), 1)
+        self.assertEqual(result["references"][0]["ref_id"], "@online1")
 
     def test_extra_queries_passed_when_llm_provided(self):
         state = _make_state()
         search = _FakeSearchClient()
         llm = _FakeLLMClient()
-
-        stage1_literature(state, search, llm_client=llm)
+        node = build_search_node(None, _SearchServices(search=search, llm=llm))
+        node({"topic": state["topic"], "discipline": state["discipline"]})
 
         # LLM generated queries should have been passed to search
         self.assertIsNotNone(search.last_extra_queries)
@@ -144,8 +156,8 @@ class TestStage1LocalRefs(unittest.TestCase):
     def test_no_extra_queries_without_llm(self):
         state = _make_state()
         search = _FakeSearchClient()
-
-        stage1_literature(state, search)  # no llm_client
+        node = build_search_node(None, _SearchServices(search=search))
+        node({"topic": state["topic"], "discipline": state["discipline"]})  # no llm_client
 
         self.assertIsNone(search.last_extra_queries)
 
@@ -171,9 +183,7 @@ class TestGenerateSearchQueries(unittest.TestCase):
 class TestRefsSnapshotHasAbstract(unittest.TestCase):
     """Verify that refs_snapshot built in _write_subtasks includes abstract."""
 
-    def test_abstract_in_snapshot(self):
-        from muse.stages import _write_subtasks
-
+    def test_write_subtasks_includes_abstract_in_available_references_snapshot(self):
         refs = [
             {
                 "ref_id": "@r1",
@@ -204,7 +214,7 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
             {"subtask_id": "ch01_s01", "title": "Intro", "target_words": 500}
         ]
 
-        _write_subtasks(
+        write_subtasks(
             llm_client=_CaptureLLM(),
             state=state,
             chapter_title="Chapter 1",
@@ -252,9 +262,10 @@ class TestStage5PerChapterPolish(unittest.TestCase):
                 }
 
         state = self._make_state_with_chapters(3)
-        stage5_polish(state, _CountingLLM())
+        outputs = _run_polish(state, _CountingLLM())
 
         self.assertEqual(call_count[0], 5)  # 3 polish + 2 abstract generation
+        self.assertIn("[polished]", outputs["final_text"])
         self.assertIn("Chapter 1", chapter_titles_received)
         self.assertIn("Chapter 2", chapter_titles_received)
         self.assertIn("Chapter 3", chapter_titles_received)
@@ -268,19 +279,19 @@ class TestStage5PerChapterPolish(unittest.TestCase):
                 raise RuntimeError("LLM error")
 
         state = self._make_state_with_chapters(2)
-        stage5_polish(state, _FailingLLM())
+        outputs = _run_polish(state, _FailingLLM())
 
         # Should fall back to original text, not crash
-        final = state["final_text"]
+        final = outputs["final_text"]
         self.assertIn("Original text for chapter 1", final)
         self.assertIn("Original text for chapter 2", final)
 
     def test_polish_notes_include_chapter_prefix(self):
         llm = _FakeLLMClient()
         state = self._make_state_with_chapters(2)
-        stage5_polish(state, llm)
+        outputs = _run_polish(state, llm)
 
-        notes = state["polish_notes"]
+        notes = outputs["polish_notes"]
         self.assertTrue(any("Chapter 1" in n for n in notes))
         self.assertTrue(any("Chapter 2" in n for n in notes))
 
@@ -290,7 +301,7 @@ class TestStage5PerChapterPolish(unittest.TestCase):
             {"chapter_id": "ch_01", "chapter_title": "Chapter 1", "merged_text": "   "},
         ]
         llm = MagicMock()
-        stage5_polish(state, llm)
+        _run_polish(state, llm)
         # LLM should not have been called for empty chapter
         llm.structured.assert_not_called()
 
@@ -336,8 +347,15 @@ class TestStage2TopicAnalysis(unittest.TestCase):
         llm, received = self._make_dual_llm()
         state = _make_state()
         state["literature_summary"] = "Some literature."
-
-        stage2_outline(state, llm)
+        node = build_outline_node(None, _OutlineServices(llm))
+        result = node(
+            {
+                "topic": state["topic"],
+                "discipline": state["discipline"],
+                "language": state["language"],
+                "literature_summary": state["literature_summary"],
+            }
+        )
 
         # The outline call payload should contain topic_analysis
         outline_calls = [c for c in received if "topic_analysis" in c]
@@ -346,6 +364,7 @@ class TestStage2TopicAnalysis(unittest.TestCase):
         self.assertIn("research_gaps", ta)
         self.assertIn("methodology_domain", ta)
         self.assertEqual(ta["methodology_domain"], "systems")
+        self.assertTrue(result["chapter_plans"])
 
     def test_topic_analysis_failure_uses_safe_defaults(self):
         """If _analyze_topic LLM call fails, outline still proceeds."""
@@ -369,14 +388,19 @@ class TestStage2TopicAnalysis(unittest.TestCase):
         state = _make_state()
         state["literature_summary"] = "Some literature."
         # Should not raise even if topic analysis fails
-        result = stage2_outline(state, _FailingAnalyzeLLM())
-        self.assertEqual(result, "hitl")
-        self.assertTrue(len(state["chapter_plans"]) > 0)
+        node = build_outline_node(None, _OutlineServices(_FailingAnalyzeLLM()))
+        result = node(
+            {
+                "topic": state["topic"],
+                "discipline": state["discipline"],
+                "language": state["language"],
+                "literature_summary": state["literature_summary"],
+            }
+        )
+        self.assertTrue(len(result["chapter_plans"]) > 0)
 
     def test_analyze_topic_returns_default_when_research_gaps_empty(self):
         """LLM returning empty research_gaps list should still be accepted (not fall back)."""
-        from muse.stages import _analyze_topic
-
         class _EmptyGapsLLM:
             def structured(self, *, system, user, route, max_tokens):
                 return {

@@ -1,21 +1,32 @@
-# Muse v3 (Usable Runtime)
+# Muse v3 (LangGraph Runtime)
 
-This repository now contains the runnable Muse v3 pipeline with real integrations and resumable runs.
+This repository now contains a LangGraph-native Muse pipeline with resumable checkpoints, chapter subgraphs, citation ledger verification, and CLI-driven HITL review.
+
+Legacy `engine/orchestrator/stages/chapter` bridge modules have been removed; the supported runtime surface is now the LangGraph path under `muse/graph/` plus the CLI/runtime wrappers that call it.
 
 ## What is implemented
 
-- 6-stage pipeline:
-  - Stage 1: multi-source literature search (Semantic Scholar + OpenAlex + arXiv)
-  - Stage 2: structured outline generation (LLM JSON output)
-  - Stage 3: chapter/subtask writing with review-revise loop
-  - Stage 4: citation verification (DOI + metadata + claim support NLI)
-  - Stage 5: cross-chapter polish
-  - Stage 6: export (markdown / LaTeX project / PDF)
+- LangGraph main flow:
+  - `initialize → search → review_refs → outline → approve_outline`
+  - `fan_out_chapters → chapter_subgraph × N → merge_chapters → review_draft`
+  - `citation_subgraph → polish → composition_subgraph → approve_final → export`
+- Chapter subgraph with Reflexion-style revise loop and parallel fan-out.
+- SQLite checkpoint persistence under `runs/<run_id>/graph/checkpoints.sqlite`.
+- Citation ledger with verified/flagged outcomes and export gating.
 - `latex` export generates a vendored BUPT thesis project, an Overleaf-ready `.zip`, and an optional locally compiled PDF when `latexmk` or `xelatex` is available.
-- HITL checkpoints with pause/resume flow.
+- HITL checkpoints with named stages: `research`, `outline`, `draft`, `final`.
 - Persistent run directories under `runs/<run_id>/`.
-- Append-only audit log `runs/<run_id>/audit.jsonl`.
 - CLI commands: `check`, `debug-llm`, `run`, `resume`, `review`, `export`.
+- Optional adapter scaffolding for `LlamaIndex` retrieval/ingestion and per-source external search wrappers.
+
+## Local setup
+
+Create the local virtual environment used by the current test/runtime flow:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+```
 
 ## Environment variables (required)
 
@@ -26,6 +37,7 @@ This repository now contains the runnable Muse v3 pipeline with real integration
 
 - `MUSE_LLM_BASE_URL` (default: `https://api.openai.com/v1`)
 - `MUSE_RUNS_DIR` (default: `runs`)
+- `MUSE_CHECKPOINT_DIR` (optional override for LangGraph checkpoint directory)
 - `MUSE_SEMANTIC_SCHOLAR_API_KEY`
 - `MUSE_OPENALEX_EMAIL`
 - `MUSE_CROSSREF_MAILTO`
@@ -137,7 +149,7 @@ This reads token from local Codex login file (`~/.codex/auth.json`, path `tokens
 
 ```bash
 export MUSE_MODEL_ROUTER_PATH="./model-router.codex-plus-oauth.example.json"
-python3 -m muse check
+.venv/bin/python -m muse check
 ```
 
 If not logged in locally, run `codex login` first.
@@ -154,20 +166,20 @@ export MUSE_LLM_MODEL="gpt-4.1-mini"
 2. Validate connectivity:
 
 ```bash
-python3 -m muse check
+.venv/bin/python -m muse check
 ```
 
 Debug LLM routing failures in detail:
 
 ```bash
-python3 -m muse debug-llm --route default
-python3 -m muse debug-llm --route reasoning
+.venv/bin/python -m muse debug-llm --route default
+.venv/bin/python -m muse debug-llm --route reasoning
 ```
 
 3. Start a run (pause at HITL):
 
 ```bash
-python3 -m muse run \
+.venv/bin/python -m muse run \
   --topic "Multi-agent systems for academic writing" \
   --discipline "Computer Science" \
   --language zh \
@@ -178,14 +190,14 @@ python3 -m muse run \
 4. Resume after review:
 
 ```bash
-python3 -m muse review --run-id <run_id> --stage 1 --approve --comment "ok"
-python3 -m muse resume --run-id <run_id>
+.venv/bin/python -m muse review --run-id <run_id> --stage research --approve --comment "ok"
+.venv/bin/python -m muse resume --run-id <run_id>
 ```
 
 5. One-shot auto-approved full run:
 
 ```bash
-python3 -m muse run \
+.venv/bin/python -m muse run \
   --topic "Multi-agent systems for academic writing" \
   --discipline "Computer Science" \
   --auto-approve \
@@ -195,7 +207,7 @@ python3 -m muse run \
 6. Export a BUPT LaTeX project for Overleaf:
 
 ```bash
-python3 -m muse export --run-id <run_id> --output-format latex
+.venv/bin/python -m muse export --run-id <run_id> --output-format latex
 ```
 
 This writes `runs/<run_id>/output/latex_project/`, packages `runs/<run_id>/output/latex_project.zip`, and attempts `runs/<run_id>/output/thesis.pdf` when local TeX tooling is available.
@@ -206,9 +218,11 @@ This writes `runs/<run_id>/output/latex_project/`, packages `runs/<run_id>/outpu
 - Local PDF compilation is best-effort and uses `latexmk` first, then `xelatex` when available.
 - Real integrations are used; no offline mock mode is included.
 - The agent enforces export blocking when `flagged_citations` is non-empty.
+- `adapters/llamaindex/` and `adapters/external_search/` are optional extension points; the default runtime still works without `llama_index`.
+- The only supported orchestration entrypoints are `Runtime.build_graph()` and the CLI commands built on top of `muse.graph.launcher`.
 
 ## Test suite
 
 ```bash
-python3 -m unittest discover -s tests -v
+.venv/bin/python -m pytest tests/ -q
 ```

@@ -1,16 +1,108 @@
+import os
 import tempfile
 import unittest
 
 from muse.config import Settings
-from muse.engine import ThesisEngine, EngineContext
+from muse.graph.launcher import build_graph, invoke
 from muse.runtime import Runtime
-from muse.schemas import new_thesis_state
-from muse.store import RunStore
+
+
+class _RuntimeSearch:
+    def search_multi_source(self, topic, discipline, extra_queries=None):
+        return (
+            [
+                {
+                    "ref_id": "@smith2024graph",
+                    "title": "Graph Systems",
+                    "authors": ["Alice Smith"],
+                    "year": 2024,
+                    "doi": "10.1000/graph",
+                    "venue": "GraphConf",
+                    "abstract": "Graph-native thesis workflow.",
+                    "source": "semantic_scholar",
+                    "verified_metadata": True,
+                }
+            ],
+            extra_queries or [topic],
+        )
+
+
+class _RuntimeMetadata:
+    def verify_doi(self, doi):
+        return True
+
+    def crosscheck_metadata(self, ref):
+        return True
+
+
+class _RuntimeLLM:
+    def structured(self, *, system, user, route="default", max_tokens=2500):
+        if "Generate 7 diverse English academic search queries" in system:
+            return {"queries": ["graph workflow"]}
+        if "Analyze this research topic" in system:
+            return {
+                "research_gaps": ["durability"],
+                "core_concepts": ["langgraph"],
+                "methodology_domain": "systems",
+                "suggested_contributions": ["checkpointed writing flow"],
+            }
+        if "Generate a thesis outline" in system:
+            return {
+                "chapters": [
+                    {
+                        "chapter_id": "ch_01",
+                        "chapter_title": "绪论",
+                        "target_words": 1200,
+                        "complexity": "low",
+                        "subsections": [{"title": "研究背景"}],
+                    }
+                ]
+            }
+        if "Write one thesis subsection with citations" in system:
+            return {
+                "text": "Drafted subsection content with citation.",
+                "citations_used": ["@smith2024graph"],
+                "key_claims": ["Graph orchestration improves durability."],
+                "transition_out": "",
+                "glossary_additions": {},
+                "self_assessment": {"confidence": 0.9, "weak_spots": [], "needs_revision": False},
+            }
+        if "strict thesis reviewer" in system:
+            return {
+                "scores": {
+                    "coherence": 4,
+                    "logic": 4,
+                    "citation": 4,
+                    "term_consistency": 4,
+                    "balance": 4,
+                    "redundancy": 4,
+                },
+                "review_notes": [],
+            }
+        if "Polish the academic thesis chapter" in system:
+            return {"final_text": "Polished chapter text.", "polish_notes": ["统一术语。"]}
+        if "你是一位学术论文摘要撰写专家" in system:
+            return {"abstract": "中文摘要", "keywords": ["图工作流"]}
+        if "You are an academic abstract writer" in system:
+            return {"abstract": "English abstract", "keywords": ["graph workflow"]}
+        raise AssertionError(f"unexpected prompt: {system}")
+
+    def entailment(self, *, premise, hypothesis, route="reasoning"):
+        return "entailment"
+
+
+class _Services:
+    def __init__(self):
+        self.llm = _RuntimeLLM()
+        self.search = _RuntimeSearch()
+        self.metadata = _RuntimeMetadata()
+        self.local_refs = []
+        self.rag_index = None
 
 
 class RuntimeFlowTests(unittest.TestCase):
-    def _make_runtime(self, runs_dir: str) -> Runtime:
-        settings = Settings(
+    def _make_settings(self, runs_dir: str) -> Settings:
+        return Settings(
             llm_api_key="x",
             llm_base_url="http://localhost",
             llm_model="stub",
@@ -20,95 +112,56 @@ class RuntimeFlowTests(unittest.TestCase):
             openalex_email=None,
             crossref_mailto=None,
             refs_dir=None,
+            checkpoint_dir=None,
         )
-        return Runtime(settings)
 
-    def test_stops_at_hitl_without_auto_approve(self):
+    def test_graph_interrupt_waits_for_hitl_when_auto_approve_disabled(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
-            )
-            store.save_state(run_id, state)
+            graph = build_graph(self._make_settings(tmp), services=_Services(), thread_id="flow-hitl", auto_approve=False)
 
-            def stage1(ctx: EngineContext):
-                ctx.state["current_stage"] = 1
-                return "hitl"
-
-            engine = ThesisEngine(
-                store=store,
-                stages={1: stage1},
+            result = invoke(
+                graph,
+                {
+                    "project_id": "flow-hitl",
+                    "topic": "LangGraph thesis automation",
+                    "discipline": "Computer Science",
+                    "language": "zh",
+                    "format_standard": "GB/T 7714-2015",
+                    "output_format": "markdown",
+                },
+                thread_id="flow-hitl",
             )
 
-            result = engine.run(run_id=run_id, start_stage=1, auto_approve=False)
-            self.assertEqual(result["status"], "waiting_hitl")
-            self.assertEqual(result["stage"], 1)
+            self.assertIn("__interrupt__", result)
+            self.assertEqual(result["__interrupt__"][0].value["stage"], "research")
 
-    def test_continues_with_auto_approve(self):
+    def test_graph_auto_approve_runs_to_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
-            )
-            store.save_state(run_id, state)
+            graph = build_graph(self._make_settings(tmp), services=_Services(), thread_id="flow-done", auto_approve=True)
 
-            def stage1(ctx: EngineContext):
-                ctx.state["current_stage"] = 1
-                return "ok"
-
-            def stage2(ctx: EngineContext):
-                ctx.state["current_stage"] = 2
-                return "done"
-
-            engine = ThesisEngine(
-                store=store,
-                stages={1: stage1, 2: stage2},
+            result = invoke(
+                graph,
+                {
+                    "project_id": "flow-done",
+                    "topic": "LangGraph thesis automation",
+                    "discipline": "Computer Science",
+                    "language": "zh",
+                    "format_standard": "GB/T 7714-2015",
+                    "output_format": "markdown",
+                },
+                thread_id="flow-done",
             )
 
-            result = engine.run(run_id=run_id, start_stage=1, auto_approve=True)
-            self.assertEqual(result["status"], "completed")
-            self.assertEqual(result["stage"], 2)
+            self.assertNotIn("__interrupt__", result)
+            self.assertEqual(result["verified_citations"], ["@smith2024graph"])
+            self.assertEqual(result["flagged_citations"], [])
+            self.assertTrue(os.path.isfile(result["output_filepath"]))
 
-    def test_engine_propagates_blocked_status(self):
+    def test_runtime_exposes_graph_builder(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = RunStore(base_dir=tmp)
-            run_id = store.create_run(topic="topic")
-            state = new_thesis_state(
-                project_id=run_id,
-                topic="topic",
-                discipline="cs",
-                language="zh",
-                format_standard="GB/T 7714-2015",
-            )
-            store.save_state(run_id, state)
-
-            def stage6(ctx: EngineContext):
-                ctx.state["current_stage"] = 6
-                return "blocked"
-
-            engine = ThesisEngine(store=store, stages={6: stage6})
-            result = engine.run(run_id=run_id, start_stage=6, auto_approve=True)
-
-            self.assertEqual(result["status"], "blocked")
-            self.assertEqual(result["stage"], 6)
-
-    def test_build_engine_rejects_docx_output_format(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            runtime = self._make_runtime(tmp)
-            run_id = runtime.store.create_run(topic="topic")
-
-            with self.assertRaises(ValueError):
-                runtime.build_engine(run_id=run_id, output_format="docx")
+            runtime = Runtime(self._make_settings(tmp))
+            graph = runtime.build_graph(thread_id="topic", auto_approve=True)
+            self.assertTrue(hasattr(graph, "invoke"))
 
 
 if __name__ == "__main__":

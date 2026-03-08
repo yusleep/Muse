@@ -1,6 +1,10 @@
 import unittest
 
-from muse.chapter import apply_chapter_review
+from muse.graph.helpers.review_state import (
+    apply_chapter_review,
+    build_revision_instructions,
+    should_iterate,
+)
 
 
 class ChapterFlowTests(unittest.TestCase):
@@ -69,6 +73,53 @@ class ChapterFlowTests(unittest.TestCase):
         self.assertEqual(route, "done")
         self.assertEqual(updated["current_iteration"], 2)
         self.assertEqual(updated["revision_instructions"], {})
+
+    def test_apply_chapter_review_matches_helper_primitives(self):
+        state = {
+            "quality_scores": {},
+            "review_notes": [],
+            "revision_instructions": {},
+            "current_iteration": 0,
+            "max_iterations": 3,
+        }
+        review = {
+            "scores": {
+                "coherence": 3,
+                "logic": 4,
+                "citation": 4,
+                "term_consistency": 4,
+                "balance": 4,
+                "redundancy": 4,
+            },
+            "review_notes": [
+                {
+                    "subtask_id": "sub_01",
+                    "issue": "衔接不足",
+                    "instruction": "补充过渡段。",
+                    "severity": 2,
+                },
+                {
+                    "subtask_id": "sub_02",
+                    "issue": "措辞问题",
+                    "instruction": "统一术语。",
+                    "severity": 1,
+                },
+            ],
+        }
+
+        route, updated = apply_chapter_review(
+            dict(state),
+            review,
+            score_threshold=4,
+            min_severity=2,
+        )
+
+        self.assertEqual(route, "revise")
+        self.assertEqual(
+            build_revision_instructions(review["review_notes"], min_severity=2),
+            {"sub_01": "补充过渡段。"},
+        )
+        self.assertEqual(should_iterate(updated, threshold=4), "revise")
 
 
 if __name__ == "__main__":
