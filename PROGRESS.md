@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 3 / 9 phases (33 / 65 tasks)
+- 总进度: 4 / 9 phases (34 / 65 tasks)
 - 当前 Wave: Wave 2 — Core Agent Capability
-- 下一步: Phase 1 Task 6
+- 下一步: Wave 2 全量回归测试
 
 ## Wave 1 — Foundation
 
@@ -37,7 +37,7 @@
 
 ## Wave 2 — Core Agent Capability
 
-### Phase 1: Sub-graph ReAct Conversion (11/12)
+### Phase 1: Sub-graph ReAct Conversion (12/12)
 - [x] Task 1: Writing tools
 - [x] Task 2: Review tools
 - [x] Task 3: Research tools
@@ -49,7 +49,7 @@
 - [x] Task 9: Citation subgraph ReAct
 - [x] Task 10: Composition tools
 - [x] Task 11: Composition subgraph ReAct
-- [ ] Task 12: Integration test
+- [x] Task 12: Integration test
 
 ## Wave 3 — Interaction & Delegation
 
@@ -108,4 +108,5 @@
 - 2026-03-08: Phase 1 Task 9 完成，新增 citation ReAct prompt，并为 citation 子图加入 ReAct + fallback 双模入口。
 - 2026-03-08: Phase 1 Task 10 完成，新增 terminology/cross-ref/transition/rewrite 四个 composition 工具。
 - 2026-03-08: Phase 1 Task 11 完成，新增 composition ReAct prompt，为 composition 子图加入 dual-mode，并将 main_graph 的 composition 节点切到新构造器。
+- 2026-03-08: Phase 1 Task 12 完成，新增 dual-mode/fallback 集成测试，Wave 2 进入全量回归验证。
 - 测试基线: `.venv/bin/python -m pytest tests/ -q` → `293 passed, 1 skipped, 21 subtests passed`
