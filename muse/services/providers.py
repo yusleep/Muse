@@ -895,6 +895,11 @@ def _extract_llm_message(result: Mapping[str, Any]) -> str:
                 content = msg.get("content")
                 if isinstance(content, str):
                     return content
+                if content is None and (
+                    isinstance(msg.get("tool_calls"), list) and msg.get("tool_calls")
+                    or isinstance(msg.get("function_call"), dict)
+                ):
+                    return ""
 
     direct = result.get("output_text")
     if isinstance(direct, str) and direct.strip():
