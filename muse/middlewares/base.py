@@ -29,11 +29,16 @@ class MiddlewareChain:
 
     def wrap(self, node_fn: Callable[..., Any]) -> Callable[..., dict[str, Any]]:
         middlewares = list(self._middlewares)
+        effective_fn = node_fn
+        for middleware in reversed(middlewares):
+            wrapper = getattr(middleware, "wrap_node", None)
+            if callable(wrapper):
+                effective_fn = wrapper(effective_fn)
 
         def wrapped(
             state: dict[str, Any], config: dict[str, Any] | None = None
         ) -> dict[str, Any]:
-            return _run_sync(middlewares, node_fn, state, config or {})
+            return _run_sync(middlewares, effective_fn, state, config or {})
 
         return wrapped
 
