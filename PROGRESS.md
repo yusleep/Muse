@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 5 / 9 phases (44 / 65 tasks)
+- 总进度: 6 / 9 phases (45 / 65 tasks)
 - 当前 Wave: Wave 3 — Interaction & Delegation
-- 下一步: Phase 3 Task 6
+- 下一步: Wave 3 全量回归测试
 
 ## Wave 1 — Foundation
 
@@ -60,13 +60,13 @@
 - [x] Task 4: Upgrade CLI review command
 - [x] Task 5: Integration test
 
-### Phase 3: Subagent Delegation (5/6)
+### Phase 3: Subagent Delegation (6/6)
 - [x] Task 1: SubagentExecutor
 - [x] Task 2: SubagentResult protocol
 - [x] Task 3: spawn_subagent tool
 - [x] Task 4: SubagentLimitMiddleware
 - [x] Task 5: Built-in agent configs
-- [ ] Task 6: Integration test
+- [x] Task 6: Integration test
 
 ## Wave 4 — External Integration
 
@@ -120,4 +120,5 @@
 - 2026-03-08: Phase 3 Task 3 完成，新增 `spawn_subagent` 工具、executor 注入点与内建 sub-agent 注册表入口。
 - 2026-03-08: Phase 3 Task 4 完成，新增 `SubagentLimitMiddleware`，可硬截断超额 `spawn_subagent` 调用。
 - 2026-03-08: Phase 3 Task 5 完成，新增 built-in research/writing/bash 子代理工厂、tool profile、turn limit 和 blocked tools 配置。
+- 2026-03-08: Phase 3 Task 6 完成，子代理集成测试覆盖 spawn、limit、executor 状态流转与结果收集。
 - 测试基线: `.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`
