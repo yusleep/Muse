@@ -11,6 +11,68 @@ from muse.prompts.chapter_review import chapter_review_prompt
 
 
 _REVIEW_LENSES = ["logic", "style", "citation", "structure"]
+_STAGE_INTERRUPT_META: dict[str, dict[str, Any]] = {
+    "research": {
+        "question": "References collected. How would you like to proceed?",
+        "clarification_type": "risk_confirmation",
+        "options": [
+            {
+                "label": "continue",
+                "description": "Accept references and proceed to outline",
+            },
+            {
+                "label": "add_keywords",
+                "description": "Add more search keywords and re-search",
+            },
+            {
+                "label": "add_manually",
+                "description": "Provide additional references manually",
+            },
+        ],
+    },
+    "outline": {
+        "question": "Outline generated. Choose a plan or customize.",
+        "clarification_type": "approach_choice",
+        "options": [
+            {"label": "approve", "description": "Accept the proposed outline"},
+            {"label": "revise", "description": "Request outline revisions with feedback"},
+            {"label": "custom", "description": "Provide a custom outline structure"},
+        ],
+    },
+    "draft": {
+        "question": "Draft chapters complete. Review quality and decide next step.",
+        "clarification_type": "suggestion",
+        "options": [
+            {
+                "label": "approve",
+                "description": "Accept draft and proceed to citation verification",
+            },
+            {
+                "label": "auto_fix",
+                "description": "Auto-fix flagged issues and re-draft",
+            },
+            {
+                "label": "guide_revision",
+                "description": "Provide specific revision guidance",
+            },
+        ],
+    },
+    "final": {
+        "question": "Final thesis assembled. Confirm before export.",
+        "clarification_type": "risk_confirmation",
+        "options": [
+            {"label": "accept", "description": "Accept and export the thesis"},
+            {
+                "label": "review_details",
+                "description": "Show detailed quality report before accepting",
+            },
+            {
+                "label": "remove_weak",
+                "description": "Remove weakly-supported citations and re-polish",
+            },
+        ],
+    },
+}
 
 
 def build_chapter_review_node(services: Any):
@@ -54,11 +116,16 @@ def build_chapter_review_node(services: Any):
 
 def build_interrupt_node(stage: str, *, auto_approve: bool):
     def interrupt_node(state: dict[str, Any]) -> dict[str, Any]:
+        meta = _STAGE_INTERRUPT_META.get(stage, {})
         payload = {
             "stage": stage,
             "project_id": state.get("project_id"),
             "ref_count": len(state.get("references", [])),
             "chapter_count": len(state.get("chapter_plans", [])),
+            "question": meta.get("question", f"Stage '{stage}' complete. Approve?"),
+            "clarification_type": meta.get("clarification_type", "risk_confirmation"),
+            "options": meta.get("options", []),
+            "context": _build_stage_context(stage, state),
         }
         if auto_approve:
             feedback = {"stage": stage, "approved": True, "auto_approve": True}
@@ -69,3 +136,44 @@ def build_interrupt_node(stage: str, *, auto_approve: bool):
         return {"review_feedback": [feedback]}
 
     return interrupt_node
+
+
+def _build_stage_context(stage: str, state: dict[str, Any]) -> str:
+    """Build a concise human-readable context string for a stage interrupt."""
+
+    parts: list[str] = []
+    if stage == "research":
+        references = state.get("references", [])
+        parts.append(f"{len(references)} reference(s) found.")
+        queries = state.get("search_queries", [])
+        if queries:
+            parts.append(f"Search queries used: {', '.join(queries[:5])}")
+    elif stage == "outline":
+        plans = state.get("chapter_plans", [])
+        titles = [
+            str(plan.get("chapter_title", "?"))
+            for plan in plans
+            if isinstance(plan, dict)
+        ]
+        parts.append(f"{len(plans)} chapter(s): {', '.join(titles)}")
+    elif stage == "draft":
+        chapters = state.get("chapters", {})
+        parts.append(f"{len(chapters)} chapter(s) drafted.")
+        scores: list[str] = []
+        if isinstance(chapters, dict):
+            for chapter_id, chapter in chapters.items():
+                quality_scores = chapter.get("quality_scores", {}) if isinstance(chapter, dict) else {}
+                numeric_scores = [
+                    int(value)
+                    for value in quality_scores.values()
+                    if isinstance(value, (int, float))
+                ]
+                if numeric_scores:
+                    scores.append(f"{chapter_id}={min(numeric_scores)}")
+        if scores:
+            parts.append(f"Min quality scores: {', '.join(scores)}")
+    elif stage == "final":
+        flagged = state.get("flagged_citations", [])
+        verified = state.get("verified_citations", [])
+        parts.append(f"{len(verified)} verified, {len(flagged)} flagged citation(s).")
+    return " ".join(parts) if parts else ""

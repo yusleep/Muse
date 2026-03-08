@@ -6,12 +6,14 @@ import os
 from typing import Any
 
 from .base import Middleware, MiddlewareChain
+from .clarification_middleware import ClarificationMiddleware
 from .dangling_tool_call import DanglingToolCallMiddleware
 from .logging_middleware import LoggingMiddleware
 from .retry_middleware import RetryMiddleware
 from .summarization_middleware import SummarizationMiddleware
 
 __all__ = [
+    "ClarificationMiddleware",
     "DanglingToolCallMiddleware",
     "LoggingMiddleware",
     "Middleware",
