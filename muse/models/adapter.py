@@ -58,6 +58,8 @@ class MuseChatModel(BaseChatModel):
             temperature=self.temperature,
             response_format=kwargs.get("response_format"),
             max_tokens=self.max_tokens,
+            tools=_coerce_tools(kwargs.get("tools")),
+            tool_choice=_coerce_tool_choice(kwargs.get("tool_choice")),
         )
 
         message = _parse_response_to_ai_message(
@@ -165,3 +167,14 @@ def _parse_tool_arguments(value: Any) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _coerce_tools(value: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list):
+        return None
+    tools = [item for item in value if isinstance(item, dict)]
+    return tools or None
+
+
+def _coerce_tool_choice(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None

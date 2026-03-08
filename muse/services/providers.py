@@ -318,6 +318,8 @@ class LLMClient:
         temperature: float = 0.2,
         response_format: dict[str, Any] | None = None,
         max_tokens: int = 2500,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> dict[str, Any]:
         import time as _time
 
@@ -335,6 +337,8 @@ class LLMClient:
                     response_format=response_format,
                     max_tokens=max_tokens,
                     streaming=attempt.requires_streaming,
+                    tools=tools,
+                    tool_choice=tool_choice,
                 )
 
                 for profile_idx, headers in enumerate(attempt.header_candidates, start=1):
@@ -795,6 +799,29 @@ def _pop_header_case_insensitive(headers: dict[str, str], key: str) -> None:
             headers.pop(existing, None)
 
 
+def _to_anthropic_tool(openai_tool: dict[str, Any]) -> dict[str, Any]:
+    """Convert an OpenAI tool schema to Anthropic's ``tool_use`` format."""
+
+    function = openai_tool.get("function", openai_tool)
+    return {
+        "name": function.get("name", ""),
+        "description": function.get("description", ""),
+        "input_schema": function.get("parameters", {"type": "object", "properties": {}}),
+    }
+
+
+def _to_responses_tool(openai_tool: dict[str, Any]) -> dict[str, Any]:
+    """Convert an OpenAI tool schema to the OpenAI Responses API format."""
+
+    function = openai_tool.get("function", openai_tool)
+    return {
+        "type": "function",
+        "name": function.get("name", ""),
+        "description": function.get("description", ""),
+        "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+    }
+
+
 def _build_request_payload(
     *,
     attempt: _ModelAttempt,
@@ -804,6 +831,8 @@ def _build_request_payload(
     response_format: dict[str, Any] | None,
     max_tokens: int,
     streaming: bool = False,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | None = None,
 ) -> dict[str, Any]:
     if attempt.api_style == "responses":
         payload: dict[str, Any] = {
@@ -839,6 +868,8 @@ def _build_request_payload(
                 text_cfg = {}
             text_cfg["format"] = {"type": "json_object"}
             payload["text"] = text_cfg
+        if tools and not streaming:
+            payload["tools"] = [_to_responses_tool(tool) for tool in tools]
         return payload
 
     if attempt.api_style == "anthropic":
@@ -854,6 +885,8 @@ def _build_request_payload(
         payload["max_tokens"] = max_tokens
         payload["system"] = system
         payload["messages"] = [{"role": "user", "content": user}]
+        if tools:
+            payload["tools"] = [_to_anthropic_tool(tool) for tool in tools]
         return payload
 
     payload = {
@@ -871,6 +904,9 @@ def _build_request_payload(
     payload["model"] = attempt.model_name
     if response_format is not None:
         payload["response_format"] = response_format
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = tool_choice or "auto"
     return payload
 
 
