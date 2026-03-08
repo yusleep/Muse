@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 2 / 9 phases (16 / 65 tasks)
+- 总进度: 2 / 9 phases (17 / 65 tasks)
 - 当前 Wave: Wave 1 — Foundation
-- 下一步: Phase 0-C Task 2
+- 下一步: Phase 0-C Task 3
 
 ## Wave 1 — Foundation
 
@@ -26,9 +26,9 @@
 - [x] Task 6: Integration with main_graph
 - [x] Task 7: Settings config
 
-### Phase 0-C: Skills Loader (1/7)
+### Phase 0-C: Skills Loader (2/7)
 - [x] Task 1: Skill dataclass + SkillLoader
-- [ ] Task 2: SkillRegistry
+- [x] Task 2: SkillRegistry
 - [ ] Task 3: academic-writing skill
 - [ ] Task 4: citation-gb-t-7714 skill
 - [ ] Task 5: thesis-structure-zh skill
