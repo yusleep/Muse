@@ -21,6 +21,7 @@ from muse.graph.state import MuseState
 from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
 from muse.graph.subgraphs.citation import build_citation_subgraph_node
 from muse.graph.subgraphs.composition import build_composition_subgraph_node
+from muse.middlewares import build_default_chain
 
 
 class _NullServices:
@@ -46,6 +47,18 @@ def _default_settings() -> Settings:
     )
 
 
+def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
+    """Wrap a node function with the default middleware chain."""
+
+    log_dir = getattr(settings, "runs_dir", None)
+    chain = build_default_chain(
+        log_dir=log_dir,
+        node_name=node_name,
+        llm=None,
+    )
+    return chain.wrap(node_fn)
+
+
 def build_graph(
     settings: Settings | None = None,
     *,
@@ -57,19 +70,42 @@ def build_graph(
     services = services or _NullServices()
 
     builder = StateGraph(MuseState)
-    builder.add_node("initialize", build_initialize_node(settings, services))
-    builder.add_node("search", build_search_node(settings, services))
+    builder.add_node(
+        "initialize",
+        _wrap(build_initialize_node(settings, services), "initialize", settings, services),
+    )
+    builder.add_node(
+        "search",
+        _wrap(build_search_node(settings, services), "search", settings, services),
+    )
     builder.add_node("review_refs", build_interrupt_node("research", auto_approve=auto_approve))
-    builder.add_node("outline", build_outline_node(settings, services))
+    builder.add_node(
+        "outline",
+        _wrap(build_outline_node(settings, services), "outline", settings, services),
+    )
     builder.add_node("approve_outline", build_interrupt_node("outline", auto_approve=auto_approve))
     builder.add_node("chapter_subgraph", build_chapter_subgraph_node(services=services))
-    builder.add_node("merge_chapters", build_merge_chapters_node(settings, services))
+    builder.add_node(
+        "merge_chapters",
+        _wrap(
+            build_merge_chapters_node(settings, services),
+            "merge_chapters",
+            settings,
+            services,
+        ),
+    )
     builder.add_node("review_draft", build_interrupt_node("draft", auto_approve=auto_approve))
     builder.add_node("citation_subgraph", build_citation_subgraph_node(services=services))
-    builder.add_node("polish", build_polish_node(services))
+    builder.add_node(
+        "polish",
+        _wrap(build_polish_node(services), "polish", settings, services),
+    )
     builder.add_node("composition_subgraph", build_composition_subgraph_node())
     builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
-    builder.add_node("export", build_export_node(settings))
+    builder.add_node(
+        "export",
+        _wrap(build_export_node(settings), "export", settings, services),
+    )
     builder.add_edge(START, "initialize")
     builder.add_edge("initialize", "search")
     builder.add_edge("search", "review_refs")

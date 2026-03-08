@@ -7,6 +7,8 @@ import concurrent.futures
 import inspect
 from typing import Any, Callable, Protocol, runtime_checkable
 
+from langchain_core.runnables import RunnableConfig
+
 
 @runtime_checkable
 class Middleware(Protocol):
@@ -36,7 +38,7 @@ class MiddlewareChain:
                 effective_fn = wrapper(effective_fn)
 
         def wrapped(
-            state: dict[str, Any], config: dict[str, Any] | None = None
+            state: dict[str, Any], config: RunnableConfig | None = None
         ) -> dict[str, Any]:
             return _run_sync(middlewares, effective_fn, state, config or {})
 
