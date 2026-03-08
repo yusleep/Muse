@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 _local = threading.local()
+_subagent_executor: Any = None
 
 
 class ClarificationOption(BaseModel):
@@ -42,6 +43,19 @@ class AskClarificationInput(BaseModel):
     )
 
 
+class SpawnSubagentInput(BaseModel):
+    """Input schema for the sub-agent spawn tool."""
+
+    message: str = Field(description="Task description for the sub-agent")
+    agent_type: Literal["research", "writing", "bash"] = Field(
+        description="Type of sub-agent to spawn"
+    )
+    wait: bool = Field(
+        default=True,
+        description="If True, wait for completion. If False, return task_id immediately.",
+    )
+
+
 def get_submitted_result() -> dict[str, Any] | None:
     """Retrieve the most recent submit_result payload."""
 
@@ -52,6 +66,19 @@ def clear_submitted_result() -> None:
     """Clear the stored submit_result payload."""
 
     _local.submitted_result = None
+
+
+def set_subagent_executor(executor: Any) -> None:
+    """Inject the executor used by ``spawn_subagent``."""
+
+    global _subagent_executor
+    _subagent_executor = executor
+
+
+def get_subagent_executor() -> Any:
+    """Return the configured sub-agent executor, if any."""
+
+    return _subagent_executor
 
 
 @tool
@@ -101,3 +128,42 @@ def ask_clarification(
         f"[CLARIFICATION PENDING] {clarification_type}: {question} "
         "(This response means the middleware did not intercept the call.)"
     )
+
+
+def _get_builtin_registry() -> dict[str, Any]:
+    """Return built-in sub-agent factories."""
+
+    try:
+        from muse.agents.builtins import BUILTIN_AGENT_FACTORIES
+    except ImportError:
+        return {}
+    return BUILTIN_AGENT_FACTORIES
+
+
+@tool(args_schema=SpawnSubagentInput)
+def spawn_subagent(
+    message: str,
+    agent_type: str,
+    wait: bool = True,
+) -> str:
+    """Spawn a specialized sub-agent for an independent subtask."""
+
+    executor = get_subagent_executor()
+    if executor is None:
+        return "[SUBAGENT ERROR] No SubagentExecutor configured. Cannot spawn sub-agent."
+
+    builtin_registry = _get_builtin_registry()
+    agent_factory = builtin_registry.get(agent_type)
+    if agent_factory is None:
+        return f"[SUBAGENT ERROR] Unknown agent type: {agent_type}"
+
+    task_fn = agent_factory(message)
+    task_id = executor.submit(agent_fn=task_fn)
+
+    if not wait:
+        return f"Sub-agent spawned: task_id={task_id}, type={agent_type}"
+
+    result = executor.get_result(task_id)
+    if result is None:
+        return f"[SUBAGENT ERROR] No result for task {task_id}"
+    return result.summary()
