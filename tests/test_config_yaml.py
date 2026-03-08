@@ -1,5 +1,6 @@
 """Tests for YAML config loading in muse.config."""
 
+import contextlib
 import os
 import tempfile
 import textwrap
@@ -13,6 +14,16 @@ from muse.config import (
     _yaml_to_settings,
     load_settings,
 )
+
+
+@contextlib.contextmanager
+def _chdir(path: str):
+    previous = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 class TestResolveEnvVars(unittest.TestCase):
@@ -104,14 +115,15 @@ class TestYamlToSettings(unittest.TestCase):
             },
             "paths": {"runs_dir": "my_runs"},
         }
-        kw = _yaml_to_settings(yaml_cfg, {})
+        with tempfile.TemporaryDirectory() as config_dir:
+            kw = _yaml_to_settings(yaml_cfg, {}, config_dir)
         self.assertIn("model_router_config", kw)
         self.assertEqual(kw["semantic_scholar_api_key"], "ss-key")
         self.assertEqual(kw["openalex_email"], "a@b.com")
         self.assertEqual(kw["middleware_retry_max"], 3)
         self.assertEqual(kw["middleware_retry_delay"], 10.0)
         self.assertEqual(kw["middleware_context_window"], 64000)
-        self.assertEqual(kw["runs_dir"], "my_runs")
+        self.assertEqual(kw["runs_dir"], os.path.join(config_dir, "my_runs"))
 
 
 class TestLoadFromYamlFile(unittest.TestCase):
@@ -152,7 +164,7 @@ class TestLoadFromYamlFile(unittest.TestCase):
             self.assertIn("models", settings.model_router_config)
             self.assertEqual(settings.openalex_email, "test@example.com")
             self.assertEqual(settings.middleware_retry_max, 5)
-            self.assertEqual(settings.runs_dir, "yaml_runs")
+            self.assertEqual(settings.runs_dir, os.path.join(os.path.dirname(yaml_path), "yaml_runs"))
         finally:
             os.unlink(yaml_path)
 
@@ -259,6 +271,121 @@ class TestLoadFromYamlFile(unittest.TestCase):
         try:
             settings = load_settings(env={}, config_path=yaml_path)
             self.assertEqual(settings.llm_model, "p/m")
+        finally:
+            os.unlink(yaml_path)
+
+    def test_missing_explicit_config_path_raises_even_if_default_exists(self):
+        fallback_yaml = textwrap.dedent("""\
+            auth:
+              profiles:
+                fallback: { api_key_env: X }
+            providers:
+              p:
+                base_url: http://localhost
+                auth: fallback
+                models:
+                  p/fallback: { model: fallback }
+            routes:
+              default: { primary: p/fallback, fallbacks: [] }
+        """)
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_path = os.path.join(tmp, "missing.yaml")
+            with open(os.path.join(tmp, "config.yaml"), "w", encoding="utf-8") as f:
+                f.write(fallback_yaml)
+
+            with _chdir(tmp):
+                with self.assertRaises(FileNotFoundError):
+                    load_settings(env={}, config_path=missing_path)
+
+    def test_missing_muse_config_env_raises_even_if_default_exists(self):
+        fallback_yaml = textwrap.dedent("""\
+            auth:
+              profiles:
+                fallback: { api_key_env: X }
+            providers:
+              p:
+                base_url: http://localhost
+                auth: fallback
+                models:
+                  p/fallback: { model: fallback }
+            routes:
+              default: { primary: p/fallback, fallbacks: [] }
+        """)
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_path = os.path.join(tmp, "missing.yaml")
+            with open(os.path.join(tmp, "config.yaml"), "w", encoding="utf-8") as f:
+                f.write(fallback_yaml)
+
+            with _chdir(tmp):
+                with self.assertRaises(FileNotFoundError):
+                    load_settings(env={"MUSE_CONFIG": missing_path})
+
+    def test_relative_yaml_paths_resolve_from_config_directory(self):
+        yaml_content = textwrap.dedent("""\
+            auth:
+              profiles:
+                k: { api_key_env: X }
+            providers:
+              p:
+                base_url: http://localhost
+                auth: k
+                models:
+                  p/m: { model: m }
+            routes:
+              default: { primary: p/m, fallbacks: [] }
+            paths:
+              runs_dir: runs
+              checkpoint_dir: ckpt
+              refs_dir: refs
+        """)
+        with tempfile.TemporaryDirectory() as config_dir, tempfile.TemporaryDirectory() as cwd:
+            refs_dir = os.path.join(config_dir, "refs")
+            os.makedirs(refs_dir, exist_ok=True)
+            yaml_path = os.path.join(config_dir, "config.yaml")
+            with open(yaml_path, "w", encoding="utf-8") as f:
+                f.write(yaml_content)
+
+            with _chdir(cwd):
+                settings = load_settings(env={}, config_path=yaml_path)
+
+            self.assertEqual(settings.runs_dir, os.path.join(config_dir, "runs"))
+            self.assertEqual(settings.checkpoint_dir, os.path.join(config_dir, "ckpt"))
+            self.assertEqual(settings.refs_dir, refs_dir)
+
+    def test_muse_llm_model_overrides_yaml_default_route(self):
+        yaml_content = textwrap.dedent("""\
+            auth:
+              profiles:
+                k: { api_key_env: X }
+            providers:
+              p:
+                base_url: http://localhost
+                auth: k
+                models:
+                  p/yaml-default: { model: yaml-default }
+                  p/env-override: { model: env-override }
+            routes:
+              default: { primary: p/yaml-default, fallbacks: [] }
+        """)
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            f.write(yaml_content)
+            f.flush()
+            yaml_path = f.name
+
+        try:
+            settings = load_settings(
+                env={
+                    "MUSE_CONFIG": yaml_path,
+                    "MUSE_LLM_MODEL": "p/env-override",
+                }
+            )
+            self.assertEqual(settings.llm_model, "p/env-override")
+            self.assertEqual(
+                settings.model_router_config["models"]["default"]["primary"],
+                "p/env-override",
+            )
         finally:
             os.unlink(yaml_path)
 

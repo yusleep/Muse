@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -84,33 +85,34 @@ def _resolve_env_vars(obj: Any, env: Mapping[str, str]) -> Any:
 
 def _load_config_yaml(
     config_path: str | None, env: Mapping[str, str]
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str | None]:
     """Find, parse, and env-resolve a config.yaml file.
 
-    Returns ``None`` when no file is found (caller falls back to env-vars).
+    Returns ``(config, config_dir)`` when a file is found, otherwise ``(None, None)``.
+    Explicit config paths must exist; they do not silently fall back.
     """
     try:
         import yaml  # type: ignore[import-untyped]
     except ModuleNotFoundError:
-        return None
+        return None, None
 
-    candidates: list[str] = []
-    if config_path:
-        candidates.append(config_path)
-    explicit = env.get("MUSE_CONFIG", "")
+    explicit = config_path or env.get("MUSE_CONFIG", "").strip()
     if explicit:
-        candidates.append(explicit)
-    candidates += ["config.yaml", "config.yml"]
+        resolved = os.path.abspath(explicit)
+        if not os.path.isfile(resolved):
+            raise FileNotFoundError(f"Config file not found: {explicit}")
+        candidates = [resolved]
+    else:
+        candidates = [os.path.abspath("config.yaml"), os.path.abspath("config.yml")]
 
-    for path in candidates:
-        resolved = os.path.abspath(path)
+    for resolved in candidates:
         if os.path.isfile(resolved):
             with open(resolved, "r", encoding="utf-8") as fh:
                 raw = yaml.safe_load(fh)
             if isinstance(raw, dict):
-                return _resolve_env_vars(raw, env)
-            return None
-    return None
+                return _resolve_env_vars(raw, env), os.path.dirname(resolved)
+            return None, os.path.dirname(resolved)
+    return None, None
 
 
 def _snake_to_camel_dict(d: dict[str, Any]) -> dict[str, Any]:
@@ -149,7 +151,7 @@ def _yaml_to_router_config(yaml_cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def _yaml_to_settings(
-    yaml_cfg: dict[str, Any], env: Mapping[str, str]
+    yaml_cfg: dict[str, Any], env: Mapping[str, str], config_dir: str | None = None
 ) -> dict[str, Any]:
     """Extract Settings field values from a parsed config.yaml dict.
 
@@ -186,14 +188,45 @@ def _yaml_to_settings(
     paths = yaml_cfg.get("paths", {})
     if isinstance(paths, dict):
         if paths.get("runs_dir"):
-            kw["runs_dir"] = str(paths["runs_dir"])
+            kw["runs_dir"] = _resolve_config_path(str(paths["runs_dir"]), config_dir)
         if paths.get("checkpoint_dir"):
-            kw["checkpoint_dir"] = os.path.abspath(str(paths["checkpoint_dir"]))
+            kw["checkpoint_dir"] = _resolve_config_path(str(paths["checkpoint_dir"]), config_dir)
         if paths.get("refs_dir"):
-            resolved = os.path.abspath(str(paths["refs_dir"]))
+            resolved = _resolve_config_path(str(paths["refs_dir"]), config_dir)
             kw["refs_dir"] = resolved if os.path.isdir(resolved) else None
 
     return kw
+
+
+def _resolve_config_path(path_value: str, config_dir: str | None) -> str:
+    path_value = path_value.strip()
+    if os.path.isabs(path_value) or not config_dir:
+        return os.path.abspath(path_value)
+    return os.path.abspath(os.path.join(config_dir, path_value))
+
+
+def _apply_default_route_override(
+    router_config: dict[str, Any],
+    llm_model: str,
+) -> dict[str, Any]:
+    if not llm_model.strip():
+        return router_config
+
+    updated = copy.deepcopy(router_config)
+    routes = updated.get("models")
+    if not isinstance(routes, dict):
+        routes = {}
+        updated["models"] = routes
+
+    default_route = routes.get("default")
+    if not isinstance(default_route, dict):
+        default_route = {"fallbacks": []}
+        routes["default"] = default_route
+
+    default_route["primary"] = llm_model.strip()
+    if "fallbacks" not in default_route or not isinstance(default_route["fallbacks"], list):
+        default_route["fallbacks"] = []
+    return updated
 
 
 def load_settings(
@@ -210,19 +243,23 @@ def load_settings(
     source = dict(os.environ if env is None else env)
 
     # Try YAML config first
-    yaml_cfg = _load_config_yaml(config_path, source)
-    yaml_kw: dict[str, Any] = _yaml_to_settings(yaml_cfg, source) if yaml_cfg else {}
+    yaml_cfg, config_dir = _load_config_yaml(config_path, source)
+    yaml_kw: dict[str, Any] = _yaml_to_settings(yaml_cfg, source, config_dir) if yaml_cfg else {}
 
-    model_router_config = _load_router_config(source)
+    env_router_config = _load_router_config(source)
     # YAML-derived router is the base; env-var router (JSON) overrides it
-    if model_router_config:
-        yaml_kw["model_router_config"] = model_router_config
+    if env_router_config:
+        yaml_kw["model_router_config"] = env_router_config
     elif "model_router_config" not in yaml_kw:
         yaml_kw["model_router_config"] = {}
     model_router_config = yaml_kw["model_router_config"]
 
     llm_api_key = source.get("MUSE_LLM_API_KEY", "").strip()
     llm_model = source.get("MUSE_LLM_MODEL", "").strip()
+
+    if llm_model and model_router_config and not env_router_config:
+        model_router_config = _apply_default_route_override(model_router_config, llm_model)
+        yaml_kw["model_router_config"] = model_router_config
 
     # Backward-compatible requirement for legacy single-model mode.
     if not model_router_config:
