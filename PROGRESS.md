@@ -1,18 +1,18 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 0 / 9 phases (4 / 65 tasks)
+- 总进度: 0 / 9 phases (5 / 65 tasks)
 - 当前 Wave: Wave 1 — Foundation
-- 下一步: Phase 0-A Task 5
+- 下一步: Phase 0-A Task 6
 
 ## Wave 1 — Foundation
 
-### Phase 0-A: Tool Abstraction Layer (4/8)
+### Phase 0-A: Tool Abstraction Layer (5/8)
 - [x] Task 1: Install LangChain dependencies
 - [x] Task 2: Create MuseChatModel adapter
 - [x] Task 3: Extend _build_request_payload for tools
 - [x] Task 4: Create model factory
-- [ ] Task 5: Create ToolRegistry
+- [x] Task 5: Create ToolRegistry
 - [ ] Task 6: Create academic_search tool
 - [ ] Task 7: Create citation tools
 - [ ] Task 8: Integration test
