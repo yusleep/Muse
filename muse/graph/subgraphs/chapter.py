@@ -1,10 +1,12 @@
-"""Chapter-level LangGraph subgraph with revise loop."""
+"""Chapter-level LangGraph subgraph with ReAct dual-mode support."""
 
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
+from langchain_core.messages import BaseMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 from muse.graph.helpers.review_state import should_iterate
@@ -13,6 +15,8 @@ from muse.graph.nodes.review import build_chapter_review_node
 
 
 class ChapterState(TypedDict, total=False):
+    messages: Annotated[list[BaseMessage], add_messages]
+    remaining_steps: int
     chapter_plan: dict[str, Any]
     references: list[dict[str, Any]]
     topic: str
@@ -45,6 +49,8 @@ def _chapter_revise(_: ChapterState) -> dict[str, Any]:
 
 
 def build_chapter_graph(*, services: Any):
+    """Build the fixed-flow chapter graph used as the safe fallback path."""
+
     builder = StateGraph(ChapterState)
     builder.add_node("chapter_draft", build_chapter_draft_node(services))
     builder.add_node("chapter_review", build_chapter_review_node(services))
@@ -60,26 +66,154 @@ def build_chapter_graph(*, services: Any):
     return builder.compile()
 
 
-def build_chapter_subgraph_node(*, services: Any):
-    chapter_graph = build_chapter_graph(services=services)
+def _references_summary(references: list[dict[str, Any]]) -> str:
+    if not references:
+        return "0 references available."
+    top_refs = ", ".join(
+        str(reference.get("ref_id", "?"))
+        for reference in references[:10]
+        if isinstance(reference, dict)
+    )
+    return f"{len(references)} references available. Top refs: {top_refs}"
 
-    def run_chapter_subgraph(state: dict[str, Any]) -> dict[str, Any]:
-        result = chapter_graph.invoke(state)
-        chapter_plan = result.get("chapter_plan", {})
-        chapter_id = chapter_plan.get("chapter_id", "chapter")
-        chapter_result = {
-            "chapter_id": chapter_id,
-            "chapter_title": chapter_plan.get("chapter_title", chapter_id),
-            "merged_text": result.get("merged_text", ""),
-            "quality_scores": result.get("quality_scores", {}),
-            "iterations_used": result.get("iteration", 0),
-            "subtask_results": result.get("subtask_results", []),
-            "citation_uses": result.get("citation_uses", []),
-            "claim_text_by_id": result.get("claim_text_by_id", {}),
-        }
-        return {
-            "chapters": {chapter_id: chapter_result},
-            "claim_text_by_id": result.get("claim_text_by_id", {}),
-        }
 
-    return run_chapter_subgraph
+def _extract_chapter_result(
+    result: dict[str, Any],
+    chapter_plan: dict[str, Any],
+) -> dict[str, Any]:
+    chapter_id = chapter_plan.get("chapter_id", "chapter")
+    iterations_used = result.get("iterations_used", result.get("iteration", 0))
+    chapter_result = {
+        "chapter_id": chapter_id,
+        "chapter_title": chapter_plan.get("chapter_title", chapter_id),
+        "merged_text": result.get("merged_text", ""),
+        "quality_scores": result.get("quality_scores", {}),
+        "iterations_used": iterations_used,
+        "subtask_results": result.get("subtask_results", []),
+        "citation_uses": result.get("citation_uses", []),
+        "claim_text_by_id": result.get("claim_text_by_id", {}),
+    }
+    return {
+        "chapters": {chapter_id: chapter_result},
+        "claim_text_by_id": result.get("claim_text_by_id", {}),
+    }
+
+
+def _build_react_chapter_agent(*, services: Any, settings: Any = None):
+    try:
+        from langgraph.prebuilt import create_react_agent
+    except ImportError:
+        return None
+
+    if settings is None:
+        return None
+
+    try:
+        from muse.models.factory import create_chat_model
+    except ImportError:
+        return None
+
+    from muse.prompts.chapter_agent import chapter_agent_system_prompt
+    from muse.tools.file import edit_file, glob_files, grep, read_file, write_file
+    from muse.tools.orchestration import submit_result, update_plan
+    from muse.tools.research import (
+        academic_search,
+        image_search,
+        read_pdf,
+        retrieve_local_refs,
+        web_fetch,
+        web_search,
+    )
+    from muse.tools.review import self_review
+    from muse.tools.writing import apply_patch, revise_section, write_section
+
+    tools = [
+        write_section,
+        revise_section,
+        apply_patch,
+        self_review,
+        academic_search,
+        retrieve_local_refs,
+        web_search,
+        web_fetch,
+        read_pdf,
+        image_search,
+        read_file,
+        write_file,
+        edit_file,
+        glob_files,
+        grep,
+        submit_result,
+        update_plan,
+    ]
+
+    try:
+        model = create_chat_model(settings, route="writing")
+    except Exception:
+        return None
+
+    def prompt(state: ChapterState) -> str:
+        chapter_plan = state.get("chapter_plan", {})
+        return chapter_agent_system_prompt(
+            topic=str(state.get("topic", "")),
+            language=str(state.get("language", "zh")),
+            chapter_title=str(chapter_plan.get("chapter_title", "")),
+            chapter_plan=chapter_plan,
+            references_summary=_references_summary(state.get("references", [])),
+        )
+
+    return create_react_agent(
+        model=model,
+        tools=tools,
+        prompt=prompt,
+        state_schema=ChapterState,
+        name="chapter_react_agent",
+    )
+
+
+def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
+    react_agent = _build_react_chapter_agent(services=services, settings=settings)
+    fallback_graph = build_chapter_graph(services=services)
+
+    def _fallback(state: dict[str, Any]) -> dict[str, Any]:
+        fallback_result = fallback_graph.invoke(state)
+        return _extract_chapter_result(fallback_result, state.get("chapter_plan", {}))
+
+    if react_agent is None:
+        return _fallback
+
+    def run_react_chapter(state: dict[str, Any]) -> dict[str, Any]:
+        from muse.tools._context import set_services
+        from muse.tools.orchestration import clear_submitted_result, get_submitted_result
+
+        set_services(services)
+        clear_submitted_result()
+
+        agent_input = dict(state)
+        agent_input.setdefault(
+            "messages",
+            [
+                {
+                    "role": "user",
+                    "content": "Draft, review, and submit this thesis chapter.",
+                }
+            ],
+        )
+
+        try:
+            react_agent.invoke(agent_input, {"recursion_limit": 60})
+        except Exception:
+            clear_submitted_result()
+            return _fallback(state)
+
+        submitted = get_submitted_result()
+        clear_submitted_result()
+        if not submitted:
+            return _fallback(state)
+
+        payload = submitted.get("payload", {})
+        if not isinstance(payload, dict):
+            return _fallback(state)
+        return _extract_chapter_result(payload, state.get("chapter_plan", {}))
+
+    return run_react_chapter

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import re
+from typing import Annotated
 from typing import Any, Literal
 
+from langchain_core.messages import BaseMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 
 class CitationState(TypedDict, total=False):
+    messages: Annotated[list[BaseMessage], add_messages]
+    remaining_steps: int
     references: list[dict[str, Any]]
     citation_uses: list[dict[str, Any]]
     claim_text_by_id: dict[str, str]
@@ -201,11 +206,92 @@ def build_citation_graph(*, services: Any):
     return builder.compile()
 
 
-def build_citation_subgraph_node(*, services: Any):
-    graph = build_citation_graph(services=services)
+def _citation_summary(references: list[dict[str, Any]]) -> str:
+    if not references:
+        return "0 references available."
+    return (
+        f"{len(references)} references available. Top refs: "
+        + ", ".join(
+            str(reference.get("ref_id", "?"))
+            for reference in references[:10]
+            if isinstance(reference, dict)
+        )
+    )
 
-    def run_citation_subgraph(state: dict[str, Any]) -> dict[str, Any]:
-        result = graph.invoke(
+
+def _extract_citation_result(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "citation_ledger": result.get("citation_ledger", {}),
+        "verified_citations": result.get("verified_citations", []),
+        "flagged_citations": result.get("flagged_citations", []),
+    }
+
+
+def _build_react_citation_agent(*, services: Any, settings: Any = None):
+    try:
+        from langgraph.prebuilt import create_react_agent
+    except ImportError:
+        return None
+
+    if settings is None:
+        return None
+
+    try:
+        from muse.models.factory import create_chat_model
+    except ImportError:
+        return None
+
+    from muse.prompts.citation_agent import citation_agent_system_prompt
+    from muse.tools.citation import (
+        crosscheck_metadata,
+        entailment_check,
+        flag_citation,
+        repair_citation,
+        verify_doi,
+    )
+    from muse.tools.file import read_file
+    from muse.tools.orchestration import submit_result, update_plan
+    from muse.tools.research import academic_search
+
+    tools = [
+        verify_doi,
+        crosscheck_metadata,
+        entailment_check,
+        flag_citation,
+        repair_citation,
+        academic_search,
+        read_file,
+        submit_result,
+        update_plan,
+    ]
+
+    try:
+        model = create_chat_model(settings, route="reasoning")
+    except Exception:
+        return None
+
+    def prompt(state: CitationState) -> str:
+        return citation_agent_system_prompt(
+            total_citations=len(state.get("citation_uses", [])),
+            total_claims=len(state.get("claim_text_by_id", {})),
+            references_summary=_citation_summary(state.get("references", [])),
+        )
+
+    return create_react_agent(
+        model=model,
+        tools=tools,
+        prompt=prompt,
+        state_schema=CitationState,
+        name="citation_react_agent",
+    )
+
+
+def build_citation_subgraph_node(*, services: Any, settings: Any = None):
+    react_agent = _build_react_citation_agent(services=services, settings=settings)
+    fallback_graph = build_citation_graph(services=services)
+
+    def _fallback(state: dict[str, Any]) -> dict[str, Any]:
+        fallback_result = fallback_graph.invoke(
             {
                 "references": state.get("references", []),
                 "citation_uses": state.get("citation_uses", []),
@@ -215,10 +301,43 @@ def build_citation_subgraph_node(*, services: Any):
                 "flagged_citations": state.get("flagged_citations", []),
             }
         )
-        return {
-            "citation_ledger": result.get("citation_ledger", {}),
-            "verified_citations": result.get("verified_citations", []),
-            "flagged_citations": result.get("flagged_citations", []),
-        }
+        return _extract_citation_result(fallback_result)
 
-    return run_citation_subgraph
+    if react_agent is None:
+        return _fallback
+
+    def run_react_citation(state: dict[str, Any]) -> dict[str, Any]:
+        from muse.tools._context import set_services
+        from muse.tools.orchestration import clear_submitted_result, get_submitted_result
+
+        set_services(services)
+        clear_submitted_result()
+
+        agent_input = dict(state)
+        agent_input.setdefault(
+            "messages",
+            [
+                {
+                    "role": "user",
+                    "content": "Verify the thesis citations and submit the ledger.",
+                }
+            ],
+        )
+
+        try:
+            react_agent.invoke(agent_input, {"recursion_limit": 40})
+        except Exception:
+            clear_submitted_result()
+            return _fallback(state)
+
+        submitted = get_submitted_result()
+        clear_submitted_result()
+        if not submitted:
+            return _fallback(state)
+
+        payload = submitted.get("payload", {})
+        if not isinstance(payload, dict):
+            return _fallback(state)
+        return _extract_citation_result(payload)
+
+    return run_react_citation

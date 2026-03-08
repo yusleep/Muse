@@ -107,7 +107,10 @@ def build_graph(
         "polish",
         _wrap(build_polish_node(services), "polish", settings, services),
     )
-    builder.add_node("composition_subgraph", build_composition_subgraph_node())
+    builder.add_node(
+        "composition_subgraph",
+        build_composition_subgraph_node(settings=settings, services=services),
+    )
     builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
     builder.add_node(
         "export",
