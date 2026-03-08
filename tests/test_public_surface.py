@@ -13,13 +13,10 @@ class PublicSurfaceTests(unittest.TestCase):
 
     def test_public_docs_describe_latex_overleaf_export_not_docx(self):
         readme_text = Path("README.md").read_text(encoding="utf-8").lower()
-        plan_text = Path("muse-plan-v2.md").read_text(encoding="utf-8").lower()
 
         self.assertIn("latex", readme_text)
         self.assertIn("overleaf", readme_text)
         self.assertNotIn("docx", readme_text)
-        self.assertNotIn("docx", plan_text)
-        self.assertNotIn("thesis_audit.jsonl", plan_text)
 
     def test_package_exports_do_not_expose_docx_helpers(self):
         self.assertTrue({"docx_export", "fill_template"}.isdisjoint(set(muse.__all__)))
@@ -43,6 +40,12 @@ class PublicSurfaceTests(unittest.TestCase):
     def test_gitignore_ignores_ralph_state_directory(self):
         gitignore_text = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn(".ralph-tui/", gitignore_text)
+
+    def test_gitignore_ignores_non_runtime_top_level_docs(self):
+        gitignore_text = Path(".gitignore").read_text(encoding="utf-8")
+        self.assertIn("Research*.md", gitignore_text)
+        self.assertIn("muse-plan-v2.md", gitignore_text)
+        self.assertIn("CODEX_PROMPTS.md", gitignore_text)
 
     def test_requirements_include_langgraph_runtime_dependencies(self):
         requirements = Path("requirements.txt")

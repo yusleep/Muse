@@ -134,4 +134,5 @@
 - 2026-03-08: Post-review wiring fixes 完成：主图现为 chapter/citation/composition 子图统一传入 `settings` 并套用默认 middleware 链；`ask_clarification` / `spawn_subagent` 增加运行时 handler/limit 注入；`Runtime` 初始化 memory/subagent/sandbox 运行时资源；built-in subagents 去掉 stub 模式并改为真实 service-backed 执行。
 - 2026-03-08: Post-review follow-up 完成：built-in subagent 改为在 `run()` 时解析 services，bash agent 支持在已有事件循环中安全执行，并消除了主图 middleware wrapper 的 `RunnableConfig` 注解告警。
 - 2026-03-08: Post-review 全量验证通过：`.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`
+- 2026-03-08: 仓库清理完成：将顶层非运行文档 `Research*.md`、`muse-plan-v2.md`、`CODEX_PROMPTS.md` 加入 `.gitignore`，并同步调整 public surface 测试以避免依赖被忽略文档；全量验证 `.venv/bin/python -m pytest tests/ -q` → `601 passed, 1 skipped, 6 warnings, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `601 passed, 1 skipped, 6 warnings, 21 subtests passed`
