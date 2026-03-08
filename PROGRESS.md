@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 1 / 9 phases (11 / 65 tasks)
+- 总进度: 1 / 9 phases (12 / 65 tasks)
 - 当前 Wave: Wave 1 — Foundation
-- 下一步: Phase 0-B Task 4
+- 下一步: Phase 0-B Task 5
 
 ## Wave 1 — Foundation
 
@@ -17,11 +17,11 @@
 - [x] Task 7: Create citation tools
 - [x] Task 8: Integration test
 
-### Phase 0-B: Middleware Framework (3/7)
+### Phase 0-B: Middleware Framework (4/7)
 - [x] Task 1: Middleware protocol + MiddlewareChain
 - [x] Task 2: LoggingMiddleware
 - [x] Task 3: RetryMiddleware
-- [ ] Task 4: SummarizationMiddleware
+- [x] Task 4: SummarizationMiddleware
 - [ ] Task 5: DanglingToolCallMiddleware
 - [ ] Task 6: Integration with main_graph
 - [ ] Task 7: Settings config
