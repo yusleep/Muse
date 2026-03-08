@@ -2,8 +2,8 @@
 
 - 状态: 进行中
 - 总进度: 3 / 9 phases (22 / 65 tasks)
-- 当前 Wave: Wave 1 — Foundation
-- 下一步: Wave 1 全量测试与收尾
+- 当前 Wave: Wave 2 — Core Agent Capability
+- 下一步: Phase 1 Task 1
 
 ## Wave 1 — Foundation
 
@@ -102,4 +102,4 @@
 
 - 2026-03-08: 旧 6 phase 计划（冻结服务边界 → 测试迁移）已 100% 完成。
 - 2026-03-08: 新增 DeerFlow-inspired upgrade 设计和 9 phase 实施计划。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `150 passed, 1 skipped`
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `293 passed, 1 skipped, 21 subtests passed`
