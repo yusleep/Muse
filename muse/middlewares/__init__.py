@@ -40,6 +40,7 @@ def build_default_chain(
     retry_base_delay: float = 5.0,
     memory_store: Any = None,
     memory_token_budget: int = 2000,
+    subagent_max_concurrent: int | None = None,
 ) -> MiddlewareChain:
     """Build the standard middleware chain for graph nodes."""
 
@@ -56,6 +57,8 @@ def build_default_chain(
                 recent_tokens=compaction_recent_tokens,
             )
         )
+    if subagent_max_concurrent is not None:
+        middlewares.append(SubagentLimitMiddleware(max_concurrent=subagent_max_concurrent))
     if memory_store is not None:
         middlewares.append(
             MemoryMiddleware(
@@ -64,4 +67,5 @@ def build_default_chain(
             )
         )
     middlewares.append(DanglingToolCallMiddleware())
+    middlewares.append(ClarificationMiddleware())
     return MiddlewareChain(middlewares)

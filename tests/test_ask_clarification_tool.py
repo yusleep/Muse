@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 
 class AskClarificationToolTests(unittest.TestCase):
@@ -57,6 +58,26 @@ class AskClarificationToolTests(unittest.TestCase):
         )
         self.assertEqual(payload.options[0].label, "Plan A")
         self.assertEqual(payload.options[0].description, "Five chapters")
+
+    def test_tool_uses_runtime_handler_when_configured(self):
+        from muse.tools.orchestration import ask_clarification, set_clarification_handler
+
+        with patch(
+            "muse.tools.orchestration._normalize_clarification_response",
+            return_value="Use five chapters.",
+        ):
+            try:
+                set_clarification_handler(lambda **_: "ignored")
+                result = ask_clarification.invoke(
+                    {
+                        "question": "How many chapters?",
+                        "clarification_type": "missing_info",
+                    }
+                )
+            finally:
+                set_clarification_handler(None)
+
+        self.assertEqual(result, "Use five chapters.")
 
 
 if __name__ == "__main__":

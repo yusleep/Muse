@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -68,6 +68,40 @@ def clear_submitted_result() -> None:
     _local.submitted_result = None
 
 
+def set_clarification_handler(handler: Callable[..., Any] | None) -> None:
+    """Set the runtime clarification handler for the current thread."""
+
+    _local.clarification_handler = handler
+
+
+def get_clarification_handler() -> Callable[..., Any] | None:
+    """Return the runtime clarification handler, if any."""
+
+    return getattr(_local, "clarification_handler", None)
+
+
+def set_subagent_limit(limit: int | None) -> None:
+    """Set the current thread's sub-agent concurrency limit."""
+
+    _local.subagent_limit = limit
+
+
+def get_subagent_limit() -> int | None:
+    """Return the active sub-agent concurrency limit, if any."""
+
+    return getattr(_local, "subagent_limit", None)
+
+
+def _normalize_clarification_response(response: Any) -> str:
+    """Normalize a clarification response into tool-output text."""
+
+    if isinstance(response, str):
+        return response
+    if response is None:
+        return ""
+    return json.dumps(response, ensure_ascii=False)
+
+
 def set_subagent_executor(executor: Any) -> None:
     """Inject the executor used by ``spawn_subagent``."""
 
@@ -123,7 +157,16 @@ def ask_clarification(
 ) -> str:
     """Ask the human reviewer for structured clarification."""
 
-    del context, options
+    handler = get_clarification_handler()
+    if callable(handler):
+        response = handler(
+            question=question,
+            clarification_type=clarification_type,
+            context=context,
+            options=options,
+        )
+        return _normalize_clarification_response(response)
+
     return (
         f"[CLARIFICATION PENDING] {clarification_type}: {question} "
         "(This response means the middleware did not intercept the call.)"
@@ -151,6 +194,10 @@ def spawn_subagent(
     executor = get_subagent_executor()
     if executor is None:
         return "[SUBAGENT ERROR] No SubagentExecutor configured. Cannot spawn sub-agent."
+
+    limit = get_subagent_limit()
+    if limit is not None and getattr(executor, "active_count", 0) >= limit:
+        return f"[SUBAGENT ERROR] Max concurrent sub-agents reached ({limit})."
 
     builtin_registry = _get_builtin_registry()
     agent_factory = builtin_registry.get(agent_type)

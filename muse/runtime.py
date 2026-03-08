@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from .config import Settings
@@ -45,11 +46,20 @@ def _load_graph_builder():
 
 class Runtime:
     def __init__(self, settings: Settings) -> None:
+        from .agents.executor import SubagentExecutor
+        from .memory.store import MemoryStore
+        from .sandbox.local import LocalSandbox
+
         self.settings = settings
         self.store = RunStore(base_dir=settings.runs_dir)
         self.llm_http = HttpClient(timeout_seconds=120)
         self.api_http = HttpClient(timeout_seconds=10)
         self.http = self.llm_http
+        runtime_dir = Path(settings.runs_dir) / "_runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        self.memory_store = MemoryStore(runtime_dir / "memory.sqlite")
+        self.subagent_executor = SubagentExecutor(max_concurrent=3)
+        self.sandbox = LocalSandbox(runtime_dir / "sandbox")
         self.llm = LLMClient(
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url,

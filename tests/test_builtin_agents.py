@@ -39,6 +39,7 @@ class BuiltinAgentTests(unittest.TestCase):
         self.assertIsInstance(result, SubagentResult)
         self.assertEqual(result.status, "completed")
         self.assertTrue(any("research" in accomplishment for accomplishment in result.accomplishments))
+        self.assertFalse(any("stub mode" in issue.lower() for issue in result.issues))
 
     def test_agent_tool_profiles_defined(self):
         from muse.agents.builtins import AGENT_TOOL_PROFILES

@@ -165,11 +165,18 @@ def build_composition_subgraph_node(*, settings: Any = None, services: Any = Non
 
     def run_react_composition(state: dict[str, Any]) -> dict[str, Any]:
         from muse.tools._context import set_services
-        from muse.tools.orchestration import clear_submitted_result, get_submitted_result
+        from muse.tools.orchestration import (
+            clear_submitted_result,
+            get_subagent_executor,
+            get_submitted_result,
+            set_subagent_executor,
+        )
 
         if services is not None:
             set_services(services)
         clear_submitted_result()
+        previous_executor = get_subagent_executor()
+        set_subagent_executor(getattr(services, "subagent_executor", None) if services is not None else None)
 
         agent_input = dict(state)
         agent_input.setdefault(
@@ -186,10 +193,12 @@ def build_composition_subgraph_node(*, settings: Any = None, services: Any = Non
             react_agent.invoke(agent_input, {"recursion_limit": 30})
         except Exception:
             clear_submitted_result()
+            set_subagent_executor(previous_executor)
             return _fallback(state)
 
         submitted = get_submitted_result()
         clear_submitted_result()
+        set_subagent_executor(previous_executor)
         if not submitted:
             return _fallback(state)
 

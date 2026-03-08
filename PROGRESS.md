@@ -131,4 +131,5 @@
 - 2026-03-08: Phase 5 定向验证通过：`.venv/bin/python -m pytest tests/test_memory_store.py tests/test_memory_prompt.py tests/test_memory_middleware.py tests/test_memory_lifecycle.py tests/test_memory_extractors.py tests/test_memory_integration.py tests/test_middleware_integration.py -q` → `85 passed`。
 - 2026-03-08: Final Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `590 passed, 1 skipped, 21 subtests passed`。
 - 2026-03-08: DeerFlow-inspired upgrade 全部 9 个 phase、65 个 task 已完成，`PROGRESS.md` 收口为 100%。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `590 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Post-review wiring fixes 完成：主图现为 chapter/citation/composition 子图统一传入 `settings` 并套用默认 middleware 链；`ask_clarification` / `spawn_subagent` 增加运行时 handler/limit 注入；`Runtime` 初始化 memory/subagent/sandbox 运行时资源；built-in subagents 去掉 stub 模式并改为真实 service-backed 执行。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `595 passed, 1 skipped, 21 subtests passed`

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
+
+from muse.config import Settings
 
 
 class _IntegrationLLM:
@@ -168,6 +171,48 @@ class FullPipelineIntegrationTest(unittest.TestCase):
         self.assertIn("final_text", result)
         self.assertIn("paper_package", result)
         self.assertTrue(result["paper_package"].get("terminology_normalized"))
+
+    def test_main_graph_passes_settings_to_react_subgraphs(self):
+        from muse.graph.main_graph import build_graph
+
+        settings = Settings(
+            llm_api_key="x",
+            llm_base_url="http://localhost",
+            llm_model="stub",
+            model_router_config={},
+            runs_dir="runs",
+            semantic_scholar_api_key=None,
+            openalex_email=None,
+            crossref_mailto=None,
+            refs_dir=None,
+            checkpoint_dir=None,
+        )
+        captured: dict[str, object] = {}
+
+        def fake_chapter_node(*, services, settings=None):
+            captured["chapter"] = settings
+            return lambda state, config=None: state
+
+        def fake_citation_node(*, services, settings=None):
+            captured["citation"] = settings
+            return lambda state, config=None: state
+
+        def fake_composition_node(*, services=None, settings=None):
+            captured["composition"] = settings
+            return lambda state, config=None: state
+
+        with patch("muse.graph.main_graph.build_chapter_subgraph_node", side_effect=fake_chapter_node), patch(
+            "muse.graph.main_graph.build_citation_subgraph_node",
+            side_effect=fake_citation_node,
+        ), patch(
+            "muse.graph.main_graph.build_composition_subgraph_node",
+            side_effect=fake_composition_node,
+        ):
+            build_graph(settings=settings, services=_IntegrationServices(), auto_approve=True)
+
+        self.assertIs(captured["chapter"], settings)
+        self.assertIs(captured["citation"], settings)
+        self.assertIs(captured["composition"], settings)
 
 
 if __name__ == "__main__":

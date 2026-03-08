@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -12,6 +13,8 @@ from typing_extensions import TypedDict
 from muse.graph.helpers.review_state import should_iterate
 from muse.graph.nodes.draft import build_chapter_draft_node
 from muse.graph.nodes.review import build_chapter_review_node
+from muse.models.adapter import MuseChatModel
+from muse.services.providers import LLMClient
 
 
 class ChapterState(TypedDict, total=False):
@@ -99,10 +102,13 @@ def _extract_chapter_result(
     }
 
 
-def _build_react_chapter_agent(*, services: Any, settings: Any = None):
-    try:
-        from langgraph.prebuilt import create_react_agent
-    except ImportError:
+def _create_react_model(*, services: Any = None, settings: Any = None):
+    llm_client = getattr(services, "llm", None) if services is not None else None
+    if isinstance(llm_client, LLMClient):
+        return MuseChatModel(llm_client=llm_client, route="writing")
+    if isinstance(llm_client, BaseChatModel):
+        return llm_client
+    if llm_client is not None:
         return None
 
     if settings is None:
@@ -110,6 +116,18 @@ def _build_react_chapter_agent(*, services: Any, settings: Any = None):
 
     try:
         from muse.models.factory import create_chat_model
+    except ImportError:
+        return None
+
+    try:
+        return create_chat_model(settings, route="writing")
+    except Exception:
+        return None
+
+
+def _build_react_chapter_agent(*, services: Any, settings: Any = None):
+    try:
+        from langgraph.prebuilt import create_react_agent
     except ImportError:
         return None
 
@@ -147,9 +165,8 @@ def _build_react_chapter_agent(*, services: Any, settings: Any = None):
         update_plan,
     ]
 
-    try:
-        model = create_chat_model(settings, route="writing")
-    except Exception:
+    model = _create_react_model(settings=settings, services=services)
+    if model is None:
         return None
 
     def prompt(state: ChapterState) -> str:
@@ -184,10 +201,17 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
 
     def run_react_chapter(state: dict[str, Any]) -> dict[str, Any]:
         from muse.tools._context import set_services
-        from muse.tools.orchestration import clear_submitted_result, get_submitted_result
+        from muse.tools.orchestration import (
+            clear_submitted_result,
+            get_subagent_executor,
+            get_submitted_result,
+            set_subagent_executor,
+        )
 
         set_services(services)
         clear_submitted_result()
+        previous_executor = get_subagent_executor()
+        set_subagent_executor(getattr(services, "subagent_executor", None))
 
         agent_input = dict(state)
         agent_input.setdefault(
@@ -204,10 +228,12 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
             react_agent.invoke(agent_input, {"recursion_limit": 60})
         except Exception:
             clear_submitted_result()
+            set_subagent_executor(previous_executor)
             return _fallback(state)
 
         submitted = get_submitted_result()
         clear_submitted_result()
+        set_subagent_executor(previous_executor)
         if not submitted:
             return _fallback(state)
 

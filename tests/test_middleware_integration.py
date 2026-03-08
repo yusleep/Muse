@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from muse.config import Settings
 
@@ -127,6 +129,45 @@ class MiddlewareIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(chain)
         finally:
             store.close()
+
+    def test_build_default_chain_includes_phase_middlewares(self):
+        from muse.memory.store import MemoryStore
+        from muse.middlewares import build_default_chain
+
+        store = MemoryStore(":memory:")
+        try:
+            chain = build_default_chain(
+                llm=object(),
+                memory_store=store,
+                subagent_max_concurrent=2,
+            )
+        finally:
+            store.close()
+
+        middleware_names = [type(middleware).__name__ for middleware in chain._middlewares]
+        self.assertIn("SummarizationMiddleware", middleware_names)
+        self.assertIn("SubagentLimitMiddleware", middleware_names)
+        self.assertIn("MemoryMiddleware", middleware_names)
+        self.assertEqual(middleware_names[-1], "ClarificationMiddleware")
+
+    def test_wrap_forwards_runtime_services_to_default_chain(self):
+        from muse.graph.main_graph import _wrap
+
+        settings = _make_settings("/tmp/mw-wrap")
+        services = SimpleNamespace(
+            llm=object(),
+            memory_store=object(),
+            subagent_executor=SimpleNamespace(max_concurrent=4),
+        )
+
+        with patch("muse.graph.main_graph.build_default_chain") as build_default_chain:
+            build_default_chain.return_value.wrap.side_effect = lambda node_fn: node_fn
+            _wrap(lambda state: state, "chapter_subgraph", settings, services)
+
+        kwargs = build_default_chain.call_args.kwargs
+        self.assertIs(kwargs["llm"], services.llm)
+        self.assertIs(kwargs["memory_store"], services.memory_store)
+        self.assertEqual(kwargs["subagent_max_concurrent"], 4)
 
 
 if __name__ == "__main__":

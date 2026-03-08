@@ -51,10 +51,11 @@ def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
     """Wrap a node function with the default middleware chain."""
 
     log_dir = getattr(settings, "runs_dir", None)
+    subagent_executor = getattr(services, "subagent_executor", None)
     chain = build_default_chain(
         log_dir=log_dir,
         node_name=node_name,
-        llm=None,
+        llm=getattr(services, "llm", None),
         max_retries=getattr(settings, "middleware_retry_max", 2),
         retry_base_delay=getattr(settings, "middleware_retry_delay", 5.0),
         context_window=getattr(settings, "middleware_context_window", 128_000),
@@ -62,6 +63,8 @@ def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
         compaction_recent_tokens=getattr(
             settings, "middleware_compaction_recent_tokens", 20_000
         ),
+        memory_store=getattr(services, "memory_store", None),
+        subagent_max_concurrent=getattr(subagent_executor, "max_concurrent", None),
     )
     return chain.wrap(node_fn)
 
@@ -91,7 +94,15 @@ def build_graph(
         _wrap(build_outline_node(settings, services), "outline", settings, services),
     )
     builder.add_node("approve_outline", build_interrupt_node("outline", auto_approve=auto_approve))
-    builder.add_node("chapter_subgraph", build_chapter_subgraph_node(services=services))
+    builder.add_node(
+        "chapter_subgraph",
+        _wrap(
+            build_chapter_subgraph_node(services=services, settings=settings),
+            "chapter_subgraph",
+            settings,
+            services,
+        ),
+    )
     builder.add_node(
         "merge_chapters",
         _wrap(
@@ -102,14 +113,27 @@ def build_graph(
         ),
     )
     builder.add_node("review_draft", build_interrupt_node("draft", auto_approve=auto_approve))
-    builder.add_node("citation_subgraph", build_citation_subgraph_node(services=services))
+    builder.add_node(
+        "citation_subgraph",
+        _wrap(
+            build_citation_subgraph_node(services=services, settings=settings),
+            "citation_subgraph",
+            settings,
+            services,
+        ),
+    )
     builder.add_node(
         "polish",
         _wrap(build_polish_node(services), "polish", settings, services),
     )
     builder.add_node(
         "composition_subgraph",
-        build_composition_subgraph_node(settings=settings, services=services),
+        _wrap(
+            build_composition_subgraph_node(settings=settings, services=services),
+            "composition_subgraph",
+            settings,
+            services,
+        ),
     )
     builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
     builder.add_node(

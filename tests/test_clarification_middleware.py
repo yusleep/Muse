@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 
 class ClarificationMiddlewareTests(unittest.TestCase):
@@ -74,6 +75,32 @@ class ClarificationMiddlewareTests(unittest.TestCase):
         self.assertEqual(message["role"], "tool")
         self.assertEqual(message["tool_call_id"], "tc_99")
         self.assertEqual(message["content"], "Use GB/T 7714")
+
+    def test_wrap_node_installs_runtime_handler_for_tool(self):
+        from muse.tools.orchestration import ask_clarification
+
+        middleware = self._make_middleware()
+
+        def node_fn(state):
+            del state
+            return {
+                "answer": ask_clarification.invoke(
+                    {
+                        "question": "How many chapters?",
+                        "clarification_type": "missing_info",
+                    }
+                )
+            }
+
+        wrapped = middleware.wrap_node(node_fn)
+        with patch.object(
+            middleware,
+            "fire_interrupt",
+            return_value={"approved": True, "comment": "五章"},
+        ):
+            result = wrapped({})
+
+        self.assertEqual(result["answer"], '{"approved": true, "comment": "五章"}')
 
 
 if __name__ == "__main__":
