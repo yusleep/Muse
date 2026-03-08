@@ -1,9 +1,9 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 3 / 9 phases (25 / 65 tasks)
+- 总进度: 3 / 9 phases (26 / 65 tasks)
 - 当前 Wave: Wave 2 — Core Agent Capability
-- 下一步: Phase 1 Task 4
+- 下一步: Phase 1 Task 5
 
 ## Wave 1 — Foundation
 
@@ -37,11 +37,11 @@
 
 ## Wave 2 — Core Agent Capability
 
-### Phase 1: Sub-graph ReAct Conversion (3/12)
+### Phase 1: Sub-graph ReAct Conversion (4/12)
 - [x] Task 1: Writing tools
 - [x] Task 2: Review tools
 - [x] Task 3: Research tools
-- [ ] Task 4: File tools
+- [x] Task 4: File tools
 - [ ] Task 5: Orchestration tools
 - [ ] Task 6: Chapter subgraph ReAct
 - [ ] Task 7: Update fan_out_chapters
