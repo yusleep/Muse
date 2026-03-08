@@ -46,6 +46,14 @@ class PublicSurfaceTests(unittest.TestCase):
         self.assertIn("Research*.md", gitignore_text)
         self.assertIn("muse-plan-v2.md", gitignore_text)
         self.assertIn("CODEX_PROMPTS.md", gitignore_text)
+        self.assertIn("docs/plans/", gitignore_text)
+
+    def test_repo_instructions_do_not_depend_on_ignored_plan_directory(self):
+        agents_text = Path("AGENTS.md").read_text(encoding="utf-8")
+        plans_text = Path("PLANS.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("docs/plans/", agents_text)
+        self.assertNotIn("docs/plans/", plans_text)
 
     def test_requirements_include_langgraph_runtime_dependencies(self):
         requirements = Path("requirements.txt")

@@ -135,4 +135,5 @@
 - 2026-03-08: Post-review follow-up 完成：built-in subagent 改为在 `run()` 时解析 services，bash agent 支持在已有事件循环中安全执行，并消除了主图 middleware wrapper 的 `RunnableConfig` 注解告警。
 - 2026-03-08: Post-review 全量验证通过：`.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`。
 - 2026-03-08: 仓库清理完成：将顶层非运行文档 `Research*.md`、`muse-plan-v2.md`、`CODEX_PROMPTS.md` 加入 `.gitignore`，并同步调整 public surface 测试以避免依赖被忽略文档；全量验证 `.venv/bin/python -m pytest tests/ -q` → `601 passed, 1 skipped, 6 warnings, 21 subtests passed`。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `601 passed, 1 skipped, 6 warnings, 21 subtests passed`
+- 2026-03-08: 仓库清理继续：将 `docs/plans/` 改为本地归档并加入 `.gitignore`，同步移除 `AGENTS.md` / `PLANS.md` 对该目录的硬引用，避免仓库说明依赖已忽略目录；全量验证 `.venv/bin/python -m pytest tests/ -q` → `602 passed, 1 skipped, 6 warnings, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `602 passed, 1 skipped, 6 warnings, 21 subtests passed`

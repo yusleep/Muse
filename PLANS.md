@@ -1,9 +1,9 @@
 # Muse Master Roadmap — DeerFlow-Inspired Upgrade
 
-## Design
+## Status
 
-- **Design doc:** `docs/plans/2026-03-08-deerflow-inspired-upgrade-design.md`
-- **Master plan:** `docs/plans/2026-03-08-deerflow-upgrade-master-plan.md`
+- DeerFlow-inspired upgrade 已于 2026-03-08 完成。
+- 详细 phase 规划文档现作为本地归档材料保留，不再作为仓库跟踪文件。
 
 ## Plans (9 phases, 5 waves, 65 tasks)
 
@@ -59,6 +59,6 @@ graph TD
 
 ## Previous Plans (已完成)
 
-以下旧计划已于 2026-03-08 之前 100% 完成并归档删除：
+以下旧计划已于 2026-03-08 之前 100% 完成并归档为本地历史材料：
 - Phase 0-5（冻结服务边界 → LangGraph 外壳 → 章节子图 → Citation/Composition → CLI/Runtime → 测试迁移）
 - Legacy bridge cleanup
