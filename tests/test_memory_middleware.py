@@ -99,7 +99,7 @@ class TestAfterInvokeHITL:
         config = {"configurable": {"node_name": "review_draft", "thread_id": "t1"}}
         _run(mw.after_invoke({}, result, config))
 
-        memories = store.query(category="feedback_pattern")
+        memories = store.query()
         assert len(memories) == 1
         assert "formal citations" in memories[0].content
 
