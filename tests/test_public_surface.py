@@ -18,6 +18,14 @@ class PublicSurfaceTests(unittest.TestCase):
         self.assertIn("overleaf", readme_text)
         self.assertNotIn("docx", readme_text)
 
+    def test_readme_prefers_unified_yaml_config(self):
+        readme_text = Path("README.md").read_text(encoding="utf-8")
+        self.assertIn("config.example.yaml", readme_text)
+        self.assertIn("config.yaml", readme_text)
+        self.assertNotIn("model-router.123nhh.example.json", readme_text)
+        self.assertNotIn("model-router.anthropic.example.json", readme_text)
+        self.assertNotIn("model-router.codex-plus-oauth.example.json", readme_text)
+
     def test_package_exports_do_not_expose_docx_helpers(self):
         self.assertTrue({"docx_export", "fill_template"}.isdisjoint(set(muse.__all__)))
 
@@ -61,6 +69,14 @@ class PublicSurfaceTests(unittest.TestCase):
         text = requirements.read_text(encoding="utf-8")
         self.assertIn("langgraph", text)
         self.assertIn("langgraph-checkpoint-sqlite", text)
+
+    def test_legacy_model_router_examples_are_removed(self):
+        for path in (
+            "model-router.123nhh.example.json",
+            "model-router.anthropic.example.json",
+            "model-router.codex-plus-oauth.example.json",
+        ):
+            self.assertFalse(Path(path).exists(), path)
 
 
 if __name__ == "__main__":
