@@ -2,8 +2,8 @@
 
 - 状态: 进行中
 - 总进度: 4 / 9 phases (34 / 65 tasks)
-- 当前 Wave: Wave 2 — Core Agent Capability
-- 下一步: Wave 2 全量回归测试
+- 当前 Wave: Wave 3 — Interaction & Delegation
+- 下一步: Phase 2 Task 1
 
 ## Wave 1 — Foundation
 
@@ -109,4 +109,5 @@
 - 2026-03-08: Phase 1 Task 10 完成，新增 terminology/cross-ref/transition/rewrite 四个 composition 工具。
 - 2026-03-08: Phase 1 Task 11 完成，新增 composition ReAct prompt，为 composition 子图加入 dual-mode，并将 main_graph 的 composition 节点切到新构造器。
 - 2026-03-08: Phase 1 Task 12 完成，新增 dual-mode/fallback 集成测试，Wave 2 进入全量回归验证。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `293 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Wave 2 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`
