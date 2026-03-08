@@ -9,6 +9,7 @@ from .base import Middleware, MiddlewareChain
 from .clarification_middleware import ClarificationMiddleware
 from .dangling_tool_call import DanglingToolCallMiddleware
 from .logging_middleware import LoggingMiddleware
+from muse.memory.middleware import MemoryMiddleware
 from .retry_middleware import RetryMiddleware
 from .subagent_limit_middleware import SubagentLimitMiddleware
 from .summarization_middleware import SummarizationMiddleware
@@ -17,6 +18,7 @@ __all__ = [
     "ClarificationMiddleware",
     "DanglingToolCallMiddleware",
     "LoggingMiddleware",
+    "MemoryMiddleware",
     "Middleware",
     "MiddlewareChain",
     "RetryMiddleware",
@@ -36,6 +38,8 @@ def build_default_chain(
     compaction_recent_tokens: int = 20_000,
     max_retries: int = 2,
     retry_base_delay: float = 5.0,
+    memory_store: Any = None,
+    memory_token_budget: int = 2000,
 ) -> MiddlewareChain:
     """Build the standard middleware chain for graph nodes."""
 
@@ -50,6 +54,13 @@ def build_default_chain(
                 context_window=context_window,
                 threshold_ratio=compaction_threshold,
                 recent_tokens=compaction_recent_tokens,
+            )
+        )
+    if memory_store is not None:
+        middlewares.append(
+            MemoryMiddleware(
+                memory_store,
+                token_budget=memory_token_budget,
             )
         )
     middlewares.append(DanglingToolCallMiddleware())

@@ -117,6 +117,17 @@ class MiddlewareIntegrationTests(unittest.TestCase):
             chain = build_default_chain(log_dir=tmp)
             self.assertIsNotNone(chain)
 
+    def test_build_default_chain_with_memory_store(self):
+        from muse.memory.store import MemoryStore
+        from muse.middlewares import build_default_chain
+
+        store = MemoryStore(":memory:")
+        try:
+            chain = build_default_chain(memory_store=store)
+            self.assertIsNotNone(chain)
+        finally:
+            store.close()
+
 
 if __name__ == "__main__":
     unittest.main()
