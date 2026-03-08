@@ -1,0 +1,48 @@
+# Muse Sandbox Image
+# Provides: TeXLive (full), Python 3, scientific Python packages
+#
+# Build:
+#   docker build -f docker/Dockerfile.sandbox -t muse-sandbox:latest .
+#
+# Size: smaller than texlive-full while still covering thesis workflows
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    texlive-base \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-latex-recommended \
+    texlive-fonts-recommended \
+    texlive-lang-chinese \
+    texlive-bibtex-extra \
+    texlive-xetex \
+    python3 \
+    python3-pip \
+    python3-venv \
+    biber \
+    latexmk \
+    ghostscript \
+    poppler-utils \
+    fonts-noto-cjk \
+    fonts-noto-cjk-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir \
+    matplotlib \
+    numpy \
+    pandas \
+    scipy \
+    seaborn \
+    Pillow \
+    tabulate
+
+RUN mkdir -p /mnt/workspace /mnt/outputs /mnt/refs
+
+WORKDIR /mnt/workspace
+
+CMD ["sleep", "infinity"]
