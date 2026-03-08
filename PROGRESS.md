@@ -2,8 +2,8 @@
 
 - 状态: 进行中
 - 总进度: 6 / 9 phases (45 / 65 tasks)
-- 当前 Wave: Wave 3 — Interaction & Delegation
-- 下一步: Wave 3 全量回归测试
+- 当前 Wave: Wave 4 — External Integration
+- 下一步: Phase 4-A Task 1
 
 ## Wave 1 — Foundation
 
@@ -121,4 +121,5 @@
 - 2026-03-08: Phase 3 Task 4 完成，新增 `SubagentLimitMiddleware`，可硬截断超额 `spawn_subagent` 调用。
 - 2026-03-08: Phase 3 Task 5 完成，新增 built-in research/writing/bash 子代理工厂、tool profile、turn limit 和 blocked tools 配置。
 - 2026-03-08: Phase 3 Task 6 完成，子代理集成测试覆盖 spawn、limit、executor 状态流转与结果收集。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `343 passed, 1 skipped, 21 subtests passed`
+- 2026-03-08: Wave 3 Gate 通过：`.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `395 passed, 1 skipped, 21 subtests passed`
