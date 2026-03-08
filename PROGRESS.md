@@ -136,4 +136,6 @@
 - 2026-03-08: Post-review 全量验证通过：`.venv/bin/python -m pytest tests/ -q` → `600 passed, 1 skipped, 6 warnings, 21 subtests passed`。
 - 2026-03-08: 仓库清理完成：将顶层非运行文档 `Research*.md`、`muse-plan-v2.md`、`CODEX_PROMPTS.md` 加入 `.gitignore`，并同步调整 public surface 测试以避免依赖被忽略文档；全量验证 `.venv/bin/python -m pytest tests/ -q` → `601 passed, 1 skipped, 6 warnings, 21 subtests passed`。
 - 2026-03-08: 仓库清理继续：将 `docs/plans/` 改为本地归档并加入 `.gitignore`，同步移除 `AGENTS.md` / `PLANS.md` 对该目录的硬引用，避免仓库说明依赖已忽略目录；全量验证 `.venv/bin/python -m pytest tests/ -q` → `602 passed, 1 skipped, 6 warnings, 21 subtests passed`。
-- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `602 passed, 1 skipped, 6 warnings, 21 subtests passed`
+- 2026-03-08: config.yaml review 修复：显式 `--config` / `MUSE_CONFIG` 缺失时改为直接报错；YAML 中 `runs_dir` / `checkpoint_dir` / `refs_dir` 的相对路径按配置文件目录解析；`MUSE_LLM_MODEL` 现在会同步覆盖 YAML 的 `default` 路由主模型；全量验证 `.venv/bin/python -m pytest tests/ -q` → `623 passed, 1 skipped, 6 warnings, 21 subtests passed`。
+- 2026-03-08: README 与配置示例收尾：README 改为以 `config.example.yaml` / `config.yaml` 为主入口，并删除 3 个过时的 `model-router.*.example.json` 路由示例文件；全量验证 `.venv/bin/python -m pytest tests/ -q` → `625 passed, 1 skipped, 6 warnings, 21 subtests passed`。
+- 测试基线: `.venv/bin/python -m pytest tests/ -q` → `625 passed, 1 skipped, 6 warnings, 21 subtests passed`

@@ -30,17 +30,32 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 ```
 
-### 2. 配置最小环境变量
+### 2. 生成并编辑 `config.yaml`
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+默认推荐直接编辑 `config.yaml`：它已经覆盖鉴权、provider、路由、检索、中间件和路径配置。  
+优先级规则是：`CLI 参数 > 环境变量 > config.yaml > 默认值`。
+
+最小可运行配置通常只需要：
+
+- 在 `auth.profiles` 里填好 API Key 来源
+- 在 `providers` 里启用你要使用的模型提供方
+- 在 `routes.default` 里指向一个可用模型
+
+如果你不想把密钥写进 `config.yaml`，可以继续走环境变量注入：
 
 ```bash
 export MUSE_LLM_API_KEY="<your-api-key>"
 export MUSE_LLM_MODEL="gpt-4.1-mini"
 ```
 
-可选：
+也可以显式指定配置文件路径：
 
 ```bash
-export MUSE_LLM_BASE_URL="https://api.openai.com/v1"
+.venv/bin/python -m muse --config /path/to/config.yaml check
 ```
 
 ### 3. 检查 CLI 与连通性
@@ -163,17 +178,13 @@ runs/         # 运行产物、checkpoint、导出结果
 
 如果你已经跑通最小流程，再看这些扩展能力：
 
-- **模型路由**：`MUSE_MODEL_ROUTER_JSON` / `MUSE_MODEL_ROUTER_PATH`
+- **统一配置文件**：`config.example.yaml` → `config.yaml`
+- **显式配置路径**：`--config /path/to/config.yaml` 或 `MUSE_CONFIG`
 - **本地参考资料**：`MUSE_REFS_DIR` 或 `--refs-dir ./refs`
 - **MCP 扩展**：`extensions.yaml` / `MUSE_EXTENSIONS_PATH`
 - **中间件调优**：`MUSE_MIDDLEWARE_*`
 - **导出增强**：本地 `pandoc`、`xelatex`、`latexmk`
-
-仓库内现成的模型路由示例：
-
-- `model-router.123nhh.example.json`
-- `model-router.anthropic.example.json`
-- `model-router.codex-plus-oauth.example.json`
+- **兼容旧路由注入**：`MUSE_MODEL_ROUTER_JSON` / `MUSE_MODEL_ROUTER_PATH` 仍可用，但不再推荐作为首选入口
 
 ## Commands
 
@@ -201,7 +212,7 @@ runs/         # 运行产物、checkpoint、导出结果
 .venv/bin/python -m pytest tests/ -q
 ```
 
-当前验证基线：`600 passed, 1 skipped, 6 warnings, 21 subtests passed`
+当前验证基线：`625 passed, 1 skipped, 6 warnings, 21 subtests passed`
 
 ## Notes
 
