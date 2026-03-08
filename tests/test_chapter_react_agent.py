@@ -82,5 +82,56 @@ class ChapterReActAgentTests(unittest.TestCase):
         self.assertIn("submit", prompt.lower())
 
 
+class FanOutChaptersTests(unittest.TestCase):
+    def test_fan_out_returns_send_objects(self):
+        from muse.graph.nodes.draft import fan_out_chapters
+
+        state = {
+            "chapter_plans": [
+                {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "Intro",
+                    "subtask_plan": [],
+                },
+                {
+                    "chapter_id": "ch_02",
+                    "chapter_title": "Methods",
+                    "subtask_plan": [],
+                },
+            ],
+            "references": [],
+            "topic": "Test topic",
+            "language": "zh",
+        }
+
+        sends = fan_out_chapters(state)
+        self.assertEqual(len(sends), 2)
+        for send in sends:
+            self.assertEqual(send.node, "chapter_subgraph")
+            self.assertIn("chapter_plan", send.arg)
+
+    def test_fan_out_preserves_all_required_keys(self):
+        from muse.graph.nodes.draft import fan_out_chapters
+
+        state = {
+            "chapter_plans": [
+                {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "Intro",
+                    "subtask_plan": [],
+                }
+            ],
+            "references": [{"ref_id": "@a", "title": "A"}],
+            "topic": "Topic",
+            "language": "en",
+        }
+
+        sends = fan_out_chapters(state)
+        payload = sends[0].arg
+        self.assertIn("references", payload)
+        self.assertIn("topic", payload)
+        self.assertIn("language", payload)
+
+
 if __name__ == "__main__":
     unittest.main()

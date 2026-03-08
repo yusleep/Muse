@@ -1,7 +1,7 @@
 # Muse Progress — DeerFlow-Inspired Upgrade
 
 - 状态: 进行中
-- 总进度: 3 / 9 phases (28 / 65 tasks)
+- 总进度: 3 / 9 phases (29 / 65 tasks)
 - 当前 Wave: Wave 2 — Core Agent Capability
 - 下一步: Phase 1 Task 6
 
@@ -37,14 +37,14 @@
 
 ## Wave 2 — Core Agent Capability
 
-### Phase 1: Sub-graph ReAct Conversion (6/12)
+### Phase 1: Sub-graph ReAct Conversion (7/12)
 - [x] Task 1: Writing tools
 - [x] Task 2: Review tools
 - [x] Task 3: Research tools
 - [x] Task 4: File tools
 - [x] Task 5: Orchestration tools
 - [x] Task 6: Chapter subgraph ReAct
-- [ ] Task 7: Update fan_out_chapters
+- [x] Task 7: Update fan_out_chapters
 - [ ] Task 8: Citation tools
 - [ ] Task 9: Citation subgraph ReAct
 - [ ] Task 10: Composition tools
@@ -103,4 +103,5 @@
 - 2026-03-08: 旧 6 phase 计划（冻结服务边界 → 测试迁移）已 100% 完成。
 - 2026-03-08: 新增 DeerFlow-inspired upgrade 设计和 9 phase 实施计划。
 - 2026-03-08: Phase 1 Task 6 完成，新增 chapter ReAct prompt，并为 chapter 子图加入 ReAct + fallback 双模入口。
+- 2026-03-08: Phase 1 Task 7 完成，补充 fan_out 契约测试并确认现有 Send 负载可直接兼容新 chapter agent。
 - 测试基线: `.venv/bin/python -m pytest tests/ -q` → `293 passed, 1 skipped, 21 subtests passed`
