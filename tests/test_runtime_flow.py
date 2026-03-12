@@ -102,8 +102,8 @@ class _Services:
 
 
 class _FinalizingCitationReactAgent:
-    def invoke(self, agent_input, config):
-        del config
+    def invoke(self, agent_input, config, **kwargs):
+        del config, kwargs
         from muse.tools.citation import finalize_citation_review, record_citation_assessment
 
         for item in agent_input.get("citation_worklist", []):

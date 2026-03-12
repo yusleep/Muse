@@ -3,7 +3,29 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
+
+_log = logging.getLogger("muse.draft")
+
+
+_WORD_TO_FLOAT: dict[str, float] = {
+    "高": 0.9, "中": 0.6, "低": 0.3,
+    "high": 0.9, "medium": 0.6, "low": 0.3,
+}
+
+
+def _safe_float(value: Any, default: float = 0.5) -> float:
+    """Convert *value* to float, mapping common CJK/English words to numbers."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().lower()
+    if s in _WORD_TO_FLOAT:
+        return _WORD_TO_FLOAT[s]
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return default
 
 
 def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str, Any]:
@@ -44,8 +66,9 @@ def write_subtasks(
     prev_text = ""
     prev_by_id = {item["subtask_id"]: item for item in previous}
 
-    for subtask in subtask_plan:
+    for st_idx, subtask in enumerate(subtask_plan):
         sid = subtask["subtask_id"]
+        _log.info("  subtask %d/%d [%s] %s", st_idx + 1, len(subtask_plan), sid, subtask.get("title", "")[:50])
         if sid in prev_by_id and sid not in revision_instructions:
             kept = dict(prev_by_id[sid])
             results.append(kept)
@@ -102,13 +125,11 @@ def write_subtasks(
             try:
                 out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
                 break
-            except Exception as exc:
-                if "JSON" in str(exc) and attempt < max_retries:
+            except Exception:
+                if attempt < max_retries:
                     continue
-                if "JSON" in str(exc):
-                    out = _extract_text_from_raw(llm_client, system, user)
-                    break
-                raise
+                out = _extract_text_from_raw(llm_client, system, user)
+                break
         if out is None:
             out = {}
 
@@ -141,7 +162,7 @@ def write_subtasks(
                 "glossary_additions": out.get("glossary_additions", {})
                 if isinstance(out.get("glossary_additions", {}), dict)
                 else {},
-                "confidence": float(assessment.get("confidence", 0.5)),
+                "confidence": _safe_float(assessment.get("confidence", 0.5)),
                 "weak_spots": assessment.get("weak_spots", [])
                 if isinstance(assessment.get("weak_spots", []), list)
                 else [],

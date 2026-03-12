@@ -466,7 +466,6 @@ def _create_react_model(*, services: Any = None, settings: Any = None):
 def _build_react_citation_agent(*, services: Any, settings: Any = None):
     try:
         from langchain.agents import create_agent
-        from langchain.agents.middleware import AgentMiddleware
         from langchain.agents.middleware.types import ModelRequest, dynamic_prompt
     except ImportError:
         return None
@@ -479,7 +478,6 @@ def _build_react_citation_agent(*, services: Any, settings: Any = None):
         record_citation_assessment,
         verify_doi,
     )
-    from muse.tools.orchestration import update_plan
 
     tools = [
         verify_doi,
@@ -487,17 +485,11 @@ def _build_react_citation_agent(*, services: Any, settings: Any = None):
         entailment_check,
         record_citation_assessment,
         finalize_citation_review,
-        update_plan,
     ]
 
     model = _create_react_model(settings=settings, services=services)
     if model is None:
         return None
-
-    class _RequireCitationToolsMiddleware(AgentMiddleware):
-        def wrap_model_call(self, request, handler):
-            request.tool_choice = "required"
-            return handler(request)
 
     @dynamic_prompt
     def prompt(request: ModelRequest) -> str:
@@ -512,7 +504,7 @@ def _build_react_citation_agent(*, services: Any, settings: Any = None):
     return create_agent(
         model=model,
         tools=tools,
-        middleware=[prompt, _RequireCitationToolsMiddleware()],
+        middleware=[prompt],
         state_schema=CitationState,
         name="citation_react_agent",
     )
@@ -571,7 +563,11 @@ def build_citation_subgraph_node(*, services: Any, settings: Any = None):
         )
         react_result: dict[str, Any] = {}
         try:
-            maybe_result = react_agent.invoke(agent_input, {"recursion_limit": 40})
+            maybe_result = react_agent.invoke(
+                agent_input,
+                {"recursion_limit": 40},
+                context={"services": services},
+            )
             if isinstance(maybe_result, dict):
                 react_result = maybe_result
             recent_trace = _recent_tool_trace(react_result.get("messages", []))

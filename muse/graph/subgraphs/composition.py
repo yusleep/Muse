@@ -193,7 +193,11 @@ def build_composition_subgraph_node(*, settings: Any = None, services: Any = Non
         )
 
         try:
-            react_agent.invoke(agent_input, {"recursion_limit": 30})
+            react_agent.invoke(
+                agent_input,
+                {"recursion_limit": 30},
+                context={"services": services},
+            )
         except Exception:
             clear_submitted_result()
             set_subagent_executor(previous_executor)

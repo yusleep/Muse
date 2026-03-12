@@ -35,8 +35,8 @@ class _FinalizingReactAgent:
         self.partial = partial
         self.skip_finalize = skip_finalize
 
-    def invoke(self, agent_input, config):
-        del config
+    def invoke(self, agent_input, config, **kwargs):
+        del config, kwargs
         from muse.tools.citation import finalize_citation_review, record_citation_assessment
 
         worklist = agent_input.get("citation_worklist")
@@ -148,9 +148,9 @@ class CitationReActTests(unittest.TestCase):
                 "entailment_check",
                 "record_citation_assessment",
                 "finalize_citation_review",
-                "update_plan",
             ],
         )
+        self.assertEqual(len(captured["middleware"]), 1)
 
     def test_react_unavailable_raises_instead_of_fallback(self):
         from muse.graph.subgraphs.citation import CitationAgentExecutionError, build_citation_subgraph_node

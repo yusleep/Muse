@@ -1,11 +1,23 @@
 """Writing tools for the chapter ReAct agent."""
 
-from __future__ import annotations
-
 import json
+from typing import Annotated
 from typing import Any
 
+from langchain.tools import ToolRuntime
+from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
+
+
+def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
+    if runtime is not None:
+        context = getattr(runtime, "context", None)
+        if isinstance(context, dict) and context.get("services") is not None:
+            return context["services"]
+
+    from muse.tools._context import get_services
+
+    return get_services()
 
 
 @tool
@@ -19,12 +31,12 @@ def write_section(
     references_json: str,
     revision_instruction: str = "",
     previous_subsection: str = "",
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
 ) -> str:
     """Write a thesis subsection from an outline subtask."""
 
-    from muse.tools._context import get_services
-
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     if llm is None:
         return json.dumps(
@@ -96,12 +108,12 @@ def revise_section(
     instruction: str,
     chapter_title: str,
     language: str,
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
 ) -> str:
     """Revise an existing thesis section using a specific instruction."""
 
-    from muse.tools._context import get_services
-
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     if llm is None:
         return section_text

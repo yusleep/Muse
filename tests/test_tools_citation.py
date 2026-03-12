@@ -10,27 +10,25 @@ class CitationToolTests(unittest.TestCase):
     def test_verify_doi_returns_result(self):
         from muse.tools.citation import verify_doi
 
-        result = verify_doi.invoke({"doi": "10.1000/test"})
+        result = verify_doi.func(doi="10.1000/test", runtime=None)
         self.assertIsInstance(result, str)
 
     def test_crosscheck_metadata_returns_result(self):
         from muse.tools.citation import crosscheck_metadata
 
-        result = crosscheck_metadata.invoke(
-            {
-                "reference_json": '{"ref_id": "@test", "title": "Test Paper", "doi": "10.1000/test", "authors": ["A. Test"], "year": 2024}'
-            }
+        result = crosscheck_metadata.func(
+            reference_json='{"ref_id": "@test", "title": "Test Paper", "doi": "10.1000/test", "authors": ["A. Test"], "year": 2024}',
+            runtime=None,
         )
         self.assertIsInstance(result, str)
 
     def test_entailment_check_returns_result(self):
         from muse.tools.citation import entailment_check
 
-        result = entailment_check.invoke(
-            {
-                "premise": "Neural networks can approximate any function.",
-                "hypothesis": "Deep learning has universal approximation capability.",
-            }
+        result = entailment_check.func(
+            premise="Neural networks can approximate any function.",
+            hypothesis="Deep learning has universal approximation capability.",
+            runtime=None,
         )
         self.assertIsInstance(result, str)
         self.assertIn(

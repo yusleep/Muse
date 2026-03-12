@@ -23,6 +23,7 @@ class ChapterState(TypedDict, total=False):
     chapter_plan: dict[str, Any]
     references: list[dict[str, Any]]
     topic: str
+    discipline: str
     language: str
     subtask_results: list[dict[str, Any]]
     merged_text: str
@@ -203,7 +204,7 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
         return _fallback
 
     def run_react_chapter(state: dict[str, Any]) -> dict[str, Any]:
-        from muse.tools._context import set_services
+        from muse.tools._context import clear_state, get_state, set_services, set_state
         from muse.tools.orchestration import (
             clear_submitted_result,
             get_subagent_executor,
@@ -212,11 +213,13 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
         )
 
         set_services(services)
+        previous_state = get_state(default=None)
         clear_submitted_result()
         previous_executor = get_subagent_executor()
         set_subagent_executor(getattr(services, "subagent_executor", None))
 
         agent_input = dict(state)
+        set_state(agent_input)
         agent_input.setdefault(
             "messages",
             [
@@ -228,15 +231,27 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
         )
 
         try:
-            react_agent.invoke(agent_input, {"recursion_limit": 60})
+            react_agent.invoke(
+                agent_input,
+                {"recursion_limit": 60},
+                context={"services": services},
+            )
         except Exception:
             clear_submitted_result()
             set_subagent_executor(previous_executor)
+            if previous_state is None:
+                clear_state()
+            else:
+                set_state(previous_state)
             return _fallback(state)
 
         submitted = get_submitted_result()
         clear_submitted_result()
         set_subagent_executor(previous_executor)
+        if previous_state is None:
+            clear_state()
+        else:
+            set_state(previous_state)
         if not submitted:
             return _fallback(state)
 

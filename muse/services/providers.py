@@ -369,7 +369,7 @@ class LLMClient:
 
             # Check if failures are transient (timeout/network) and we can retry
             failure_text = " | ".join(failures) if failures else "no attempts were available"
-            is_transient = any(kw in failure_text.lower() for kw in ("timed out", "timeout", "network", "connection", "502", "503", "504", "429", "invalid json response"))
+            is_transient = any(kw in failure_text.lower() for kw in ("timed out", "timeout", "network", "connection", "500", "502", "503", "504", "429", "auth_unavailable", "invalid json response"))
             if is_transient and _retry < _transient_retries:
                 _time.sleep(5 * (_retry + 1))
                 continue
@@ -405,6 +405,8 @@ class LLMClient:
             max_tokens=max_tokens,
         )
         content = out["content"]
+        if not content:
+            raise ProviderError("LLM structured response was empty")
         parsed = _parse_json_relaxed(content)
         if not isinstance(parsed, dict):
             raise ProviderError("LLM structured response was not a JSON object")
@@ -939,6 +941,8 @@ def _extract_llm_message(result: Mapping[str, Any]) -> str:
                     isinstance(msg.get("tool_calls"), list) and msg.get("tool_calls")
                     or isinstance(msg.get("function_call"), dict)
                 ):
+                    return ""
+                if content is None:
                     return ""
 
     direct = result.get("output_text")

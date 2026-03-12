@@ -1,21 +1,35 @@
 """Composition tools for terminology, cross-references, transitions, and rewriting."""
 
-from __future__ import annotations
-
 import json
 import re
+from typing import Annotated
 from typing import Any
 
+from langchain.tools import ToolRuntime
+from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
 
-@tool
-def check_terminology(text: str) -> str:
-    """Scan text for terminology inconsistencies."""
+def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
+    if runtime is not None:
+        context = getattr(runtime, "context", None)
+        if isinstance(context, dict) and context.get("services") is not None:
+            return context["services"]
 
     from muse.tools._context import get_services
 
-    services = get_services()
+    return get_services()
+
+
+@tool
+def check_terminology(
+    text: str,
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
+) -> str:
+    """Scan text for terminology inconsistencies."""
+
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     if llm is None:
         abbreviations = sorted(set(re.findall(r"\b[A-Z]{2,}\b", text)))
@@ -77,10 +91,12 @@ def align_cross_refs(text: str) -> str:
 
 
 @tool
-def check_transitions(chapter_texts_json: str) -> str:
+def check_transitions(
+    chapter_texts_json: str,
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
+) -> str:
     """Check transition quality between adjacent chapter excerpts."""
-
-    from muse.tools._context import get_services
 
     try:
         chapters = json.loads(chapter_texts_json)
@@ -90,7 +106,7 @@ def check_transitions(chapter_texts_json: str) -> str:
     if not isinstance(chapters, list):
         chapters = []
 
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     transitions: list[dict[str, Any]] = []
     for index in range(len(chapters) - 1):
@@ -138,12 +154,12 @@ def rewrite_passage(
     passage: str,
     instruction: str,
     context: str = "",
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
 ) -> str:
     """Rewrite a passage according to a focused instruction."""
 
-    from muse.tools._context import get_services
-
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     if llm is None:
         return passage

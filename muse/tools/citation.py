@@ -1,12 +1,13 @@
 """Citation tools for both LangChain bindings and ReAct agents."""
 
-from __future__ import annotations
-
 import json
 import threading
+from typing import Annotated
 from typing import Any, Literal
 
+from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool
+from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -312,13 +313,26 @@ def _finalized_citation_payload(session: dict[str, Any], *, summary: str) -> dic
     }
 
 
-@tool
-def verify_doi(doi: str) -> str:
-    """Verify that a DOI resolves to a valid record."""
+def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
+    if runtime is not None:
+        context = getattr(runtime, "context", None)
+        if isinstance(context, dict) and context.get("services") is not None:
+            return context["services"]
 
     from muse.tools._context import get_services
 
-    services = get_services()
+    return get_services()
+
+
+@tool
+def verify_doi(
+    doi: str,
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
+) -> str:
+    """Verify that a DOI resolves to a valid record."""
+
+    services = _services_from_runtime(runtime)
     metadata_client = getattr(services, "metadata", None)
     if metadata_client is None:
         valid = bool(doi and doi.startswith("10."))
@@ -361,10 +375,10 @@ def crosscheck_metadata(
     year: str = "",
     doi: str = "",
     ref_id: str = "",
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
 ) -> str:
     """Cross-check a reference object's metadata for consistency."""
-
-    from muse.tools._context import get_services
 
     reference = _build_reference_payload(
         reference_json=reference_json,
@@ -392,7 +406,7 @@ def crosscheck_metadata(
     if not reference.get("year"):
         issues.append("missing year")
 
-    services = get_services()
+    services = _services_from_runtime(runtime)
     metadata_client = getattr(services, "metadata", None)
     if metadata_client is not None:
         try:
@@ -477,12 +491,15 @@ def finalize_citation_review(summary: str) -> str:
 
 
 @tool
-def entailment_check(premise: str, hypothesis: str) -> str:
+def entailment_check(
+    premise: str,
+    hypothesis: str,
+    *,
+    runtime: Annotated[ToolRuntime, InjectedToolArg],
+) -> str:
     """Check whether a premise supports a citation claim."""
 
-    from muse.tools._context import get_services
-
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     if llm is None or not hasattr(llm, "entailment"):
         return json.dumps(

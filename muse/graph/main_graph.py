@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+_log = logging.getLogger("muse.graph")
 
 from langgraph.graph import END, START, StateGraph
 
@@ -66,7 +69,15 @@ def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
         memory_store=getattr(services, "memory_store", None),
         subagent_max_concurrent=getattr(subagent_executor, "max_concurrent", None),
     )
-    return chain.wrap(node_fn)
+    inner = chain.wrap(node_fn)
+
+    def _logged_node(state):
+        _log.info("[%s] enter", node_name)
+        result = inner(state)
+        _log.info("[%s] exit", node_name)
+        return result
+
+    return _logged_node
 
 
 def build_graph(

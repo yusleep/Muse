@@ -28,9 +28,8 @@ You only have these tools:
 - `entailment_check`
 - `record_citation_assessment`
 - `finalize_citation_review`
-- `update_plan`
 
-Do not ask for file access, web search, academic search, or generic result submission.
+Do not ask for file access, web search, academic search, progress updates, or generic result submission.
 
 ## Required Workflow
 1. Read the `citation_worklist` from state and process it sequentially.
@@ -52,5 +51,4 @@ Do not ask for file access, web search, academic search, or generic result submi
 - Never skip a worklist item.
 - Never finalize early.
 - If metadata mismatches or evidence does not support the claim, record a non-verified verdict instead of hiding the issue.
-- Use `update_plan` for progress reporting if helpful, but it does not finish the task.
 """

@@ -26,18 +26,22 @@ class _FakeLLM:
 
 class WriteSectionToolTests(unittest.TestCase):
     def test_write_section_returns_text_and_citations(self):
+        from muse.tools._context import set_services
         from muse.tools.writing import write_section
 
-        result = write_section.invoke(
-            {
-                "chapter_title": "Introduction",
-                "subtask_id": "sub_01",
-                "subtask_title": "Background",
-                "target_words": 1200,
-                "topic": "LangGraph thesis automation",
-                "language": "zh",
-                "references_json": '[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
-            }
+        class _Services:
+            llm = _FakeLLM()
+
+        set_services(_Services())
+        result = write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
         )
         self.assertIsInstance(result, str)
         self.assertIn("text", result)
@@ -45,13 +49,12 @@ class WriteSectionToolTests(unittest.TestCase):
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 
-        result = revise_section.invoke(
-            {
-                "section_text": "Original text here.",
-                "instruction": "Improve transitions between paragraphs.",
-                "chapter_title": "Introduction",
-                "language": "zh",
-            }
+        result = revise_section.func(
+            section_text="Original text here.",
+            instruction="Improve transitions between paragraphs.",
+            chapter_title="Introduction",
+            language="zh",
+            runtime=None,
         )
         self.assertIsInstance(result, str)
 
