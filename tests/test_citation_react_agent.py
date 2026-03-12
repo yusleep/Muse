@@ -125,10 +125,11 @@ class CitationReActTests(unittest.TestCase):
 
         captured: dict[str, object] = {}
 
-        def fake_create_agent(*, model, tools, middleware, state_schema, name):
+        def fake_create_agent(*, model, tools, middleware, state_schema, context_schema, name):
             captured["tools"] = tools
             captured["middleware"] = middleware
             captured["state_schema"] = state_schema
+            captured["context_schema"] = context_schema
             captured["name"] = name
             return object()
 
@@ -151,6 +152,7 @@ class CitationReActTests(unittest.TestCase):
             ],
         )
         self.assertEqual(len(captured["middleware"]), 1)
+        self.assertIsNotNone(captured["context_schema"])
 
     def test_react_unavailable_raises_instead_of_fallback(self):
         from muse.graph.subgraphs.citation import CitationAgentExecutionError, build_citation_subgraph_node

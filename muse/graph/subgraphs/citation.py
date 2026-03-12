@@ -17,6 +17,7 @@ from typing_extensions import TypedDict
 
 from muse.models.adapter import MuseChatModel
 from muse.services.providers import LLMClient
+from muse.tools._context import AgentRuntimeContext, build_runtime_context
 
 _log = logging.getLogger("muse.citation")
 
@@ -506,6 +507,7 @@ def _build_react_citation_agent(*, services: Any, settings: Any = None):
         tools=tools,
         middleware=[prompt],
         state_schema=CitationState,
+        context_schema=AgentRuntimeContext,
         name="citation_react_agent",
     )
 
@@ -566,7 +568,7 @@ def build_citation_subgraph_node(*, services: Any, settings: Any = None):
             maybe_result = react_agent.invoke(
                 agent_input,
                 {"recursion_limit": 40},
-                context={"services": services},
+                context=build_runtime_context(services),
             )
             if isinstance(maybe_result, dict):
                 react_result = maybe_result

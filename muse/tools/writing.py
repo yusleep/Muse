@@ -8,16 +8,16 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
+from muse.tools._context import AgentRuntimeContext
 
-def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
-    if runtime is not None:
-        context = getattr(runtime, "context", None)
-        if isinstance(context, dict) and context.get("services") is not None:
-            return context["services"]
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
 
-    from muse.tools._context import get_services
 
-    return get_services()
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
+
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
 @tool
@@ -32,7 +32,7 @@ def write_section(
     revision_instruction: str = "",
     previous_subsection: str = "",
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Write a thesis subsection from an outline subtask."""
 
@@ -109,7 +109,7 @@ def revise_section(
     chapter_title: str,
     language: str,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Revise an existing thesis section using a specific instruction."""
 

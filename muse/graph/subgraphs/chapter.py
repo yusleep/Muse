@@ -15,6 +15,7 @@ from muse.graph.nodes.draft import build_chapter_draft_node
 from muse.graph.nodes.review import build_chapter_review_node
 from muse.models.adapter import MuseChatModel
 from muse.services.providers import LLMClient
+from muse.tools._context import AgentRuntimeContext, build_runtime_context
 
 
 class ChapterState(TypedDict, total=False):
@@ -188,6 +189,7 @@ def _build_react_chapter_agent(*, services: Any, settings: Any = None):
         tools=tools,
         middleware=[prompt],
         state_schema=ChapterState,
+        context_schema=AgentRuntimeContext,
         name="chapter_react_agent",
     )
 
@@ -234,7 +236,7 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
             react_agent.invoke(
                 agent_input,
                 {"recursion_limit": 60},
-                context={"services": services},
+                context=build_runtime_context(services),
             )
         except Exception:
             clear_submitted_result()

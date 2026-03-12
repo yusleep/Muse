@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 
 from muse.models.adapter import MuseChatModel
 from muse.services.providers import LLMClient
+from muse.tools._context import AgentRuntimeContext, build_runtime_context
 
 
 class CompositionState(TypedDict, total=False):
@@ -143,6 +144,7 @@ def _build_react_composition_agent(*, settings: Any = None, services: Any = None
         tools=tools,
         middleware=[prompt],
         state_schema=CompositionState,
+        context_schema=AgentRuntimeContext,
         name="composition_react_agent",
     )
 
@@ -196,7 +198,7 @@ def build_composition_subgraph_node(*, settings: Any = None, services: Any = Non
             react_agent.invoke(
                 agent_input,
                 {"recursion_limit": 30},
-                context={"services": services},
+                context=build_runtime_context(services),
             )
         except Exception:
             clear_submitted_result()

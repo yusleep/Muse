@@ -10,6 +10,10 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
+from muse.tools._context import AgentRuntimeContext
+
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
+
 
 def _tokenize_query(query: str) -> list[str]:
     return re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]+", str(query or "").lower())
@@ -67,18 +71,14 @@ def _search_state_references(
     return fallback_refs[:top_k]
 
 
-def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
-    if runtime is not None:
-        context = getattr(runtime, "context", None)
-        if isinstance(context, dict) and context.get("services") is not None:
-            return context["services"]
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
 
-    from muse.tools._context import get_services
-
-    return get_services()
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
-def _state_from_runtime(runtime: ToolRuntime | None) -> dict[str, Any]:
+def _state_from_runtime(runtime: MuseToolRuntime | None) -> dict[str, Any]:
     if runtime is not None and isinstance(getattr(runtime, "state", None), dict):
         return runtime.state
 
@@ -115,7 +115,7 @@ def academic_search(
     query: str,
     max_results: int = 10,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Search academic databases for papers and return a JSON list."""
 
@@ -145,7 +145,7 @@ def retrieve_local_refs(
     query: str,
     top_k: int = 5,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Retrieve relevant local reference passages via RAG."""
 

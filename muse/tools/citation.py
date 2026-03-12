@@ -11,6 +11,10 @@ from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
+from muse.tools._context import AgentRuntimeContext
+
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
+
 
 _local = threading.local()
 
@@ -313,22 +317,18 @@ def _finalized_citation_payload(session: dict[str, Any], *, summary: str) -> dic
     }
 
 
-def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
-    if runtime is not None:
-        context = getattr(runtime, "context", None)
-        if isinstance(context, dict) and context.get("services") is not None:
-            return context["services"]
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
 
-    from muse.tools._context import get_services
-
-    return get_services()
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
 @tool
 def verify_doi(
     doi: str,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Verify that a DOI resolves to a valid record."""
 
@@ -376,7 +376,7 @@ def crosscheck_metadata(
     doi: str = "",
     ref_id: str = "",
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Cross-check a reference object's metadata for consistency."""
 
@@ -495,7 +495,7 @@ def entailment_check(
     premise: str,
     hypothesis: str,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Check whether a premise supports a citation claim."""
 

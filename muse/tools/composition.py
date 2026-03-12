@@ -9,23 +9,23 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
+from muse.tools._context import AgentRuntimeContext
 
-def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
-    if runtime is not None:
-        context = getattr(runtime, "context", None)
-        if isinstance(context, dict) and context.get("services") is not None:
-            return context["services"]
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
 
-    from muse.tools._context import get_services
 
-    return get_services()
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
+
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
 @tool
 def check_terminology(
     text: str,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Scan text for terminology inconsistencies."""
 
@@ -94,7 +94,7 @@ def align_cross_refs(text: str) -> str:
 def check_transitions(
     chapter_texts_json: str,
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Check transition quality between adjacent chapter excerpts."""
 
@@ -155,7 +155,7 @@ def rewrite_passage(
     instruction: str,
     context: str = "",
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Rewrite a passage according to a focused instruction."""
 

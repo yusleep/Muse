@@ -64,6 +64,14 @@ class _FakeLLMClient:
         return {}
 
 
+class _ManyQueriesLLMClient:
+    """LLM double that returns more queries than the node should use."""
+
+    def structured(self, *, system, user, route, max_tokens):
+        del system, user, route, max_tokens
+        return {"queries": [f"query {idx}" for idx in range(10)]}
+
+
 class _SearchServices:
     def __init__(self, *, search=None, llm=None, local_refs=None, rag_index=None):
         self.search = search or _FakeSearchClient()
@@ -152,6 +160,30 @@ class TestStage1LocalRefs(unittest.TestCase):
         self.assertIsNotNone(search.last_extra_queries)
         self.assertIsInstance(search.last_extra_queries, list)
         self.assertGreater(len(search.last_extra_queries), 0)
+
+    def test_local_refs_reduce_online_query_budget(self):
+        state = _make_state()
+        search = _FakeSearchClient()
+        llm = _ManyQueriesLLMClient()
+        local = self._make_local_refs(2)
+        node = build_search_node(None, _SearchServices(search=search, llm=llm, local_refs=local))
+
+        node({"topic": state["topic"], "discipline": state["discipline"]})
+
+        self.assertEqual(search.last_extra_queries, ["query 0", "query 1"])
+
+    def test_online_only_search_uses_capped_query_budget(self):
+        state = _make_state()
+        search = _FakeSearchClient()
+        llm = _ManyQueriesLLMClient()
+        node = build_search_node(None, _SearchServices(search=search, llm=llm))
+
+        node({"topic": state["topic"], "discipline": state["discipline"]})
+
+        self.assertEqual(
+            search.last_extra_queries,
+            ["query 0", "query 1", "query 2", "query 3"],
+        )
 
     def test_no_extra_queries_without_llm(self):
         state = _make_state()

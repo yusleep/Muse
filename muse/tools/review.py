@@ -10,17 +10,16 @@ from langchain_core.tools import tool
 
 from muse.graph.helpers.review_state import build_revision_instructions
 from muse.prompts.chapter_review import chapter_review_prompt
+from muse.tools._context import AgentRuntimeContext
+
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
 
 
-def _services_from_runtime(runtime: ToolRuntime | None) -> Any:
-    if runtime is not None:
-        context = getattr(runtime, "context", None)
-        if isinstance(context, dict) and context.get("services") is not None:
-            return context["services"]
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
 
-    from muse.tools._context import get_services
-
-    return get_services()
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
 @tool
@@ -29,7 +28,7 @@ def self_review(
     merged_text: str,
     lenses: str = "logic,style,citation,structure",
     *,
-    runtime: Annotated[ToolRuntime, InjectedToolArg],
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Run a multi-lens quality review on a chapter draft."""
 
