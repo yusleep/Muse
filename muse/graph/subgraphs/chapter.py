@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -16,6 +17,8 @@ from muse.graph.nodes.review import build_chapter_review_node
 from muse.models.adapter import MuseChatModel
 from muse.services.providers import LLMClient
 from muse.tools._context import AgentRuntimeContext, build_runtime_context
+
+_log = logging.getLogger("muse.chapter")
 
 
 class ChapterState(TypedDict, total=False):
@@ -102,6 +105,10 @@ def _extract_chapter_result(
         "chapters": {chapter_id: chapter_result},
         "claim_text_by_id": result.get("claim_text_by_id", {}),
     }
+
+
+def _message_count(messages: Any) -> int:
+    return len(messages) if isinstance(messages, list) else 0
 
 
 def _create_react_model(*, services: Any = None, settings: Any = None):
@@ -219,6 +226,15 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
         clear_submitted_result()
         previous_executor = get_subagent_executor()
         set_subagent_executor(getattr(services, "subagent_executor", None))
+        chapter_plan = state.get("chapter_plan", {})
+        chapter_id = str(chapter_plan.get("chapter_id", "chapter"))
+        subtask_count = len(chapter_plan.get("subtask_plan", [])) if isinstance(chapter_plan, dict) else 0
+        _log.info(
+            "chapter react start chapter_id=%s references=%d subtasks=%d",
+            chapter_id,
+            len(state.get("references", [])) if isinstance(state.get("references"), list) else 0,
+            subtask_count,
+        )
 
         agent_input = dict(state)
         set_state(agent_input)
@@ -232,13 +248,22 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
             ],
         )
 
+        react_result: dict[str, Any] = {}
         try:
-            react_agent.invoke(
+            maybe_result = react_agent.invoke(
                 agent_input,
                 {"recursion_limit": 60},
                 context=build_runtime_context(services),
             )
-        except Exception:
+            if isinstance(maybe_result, dict):
+                react_result = maybe_result
+        except Exception as exc:
+            _log.exception(
+                "chapter react fallback chapter_id=%s reason=invoke_error error=%s: %s",
+                chapter_id,
+                type(exc).__name__,
+                exc,
+            )
             clear_submitted_result()
             set_subagent_executor(previous_executor)
             if previous_state is None:
@@ -248,6 +273,12 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
             return _fallback(state)
 
         submitted = get_submitted_result()
+        _log.info(
+            "chapter react invoke_return chapter_id=%s messages=%d submitted=%s",
+            chapter_id,
+            _message_count(react_result.get("messages")),
+            bool(submitted),
+        )
         clear_submitted_result()
         set_subagent_executor(previous_executor)
         if previous_state is None:
@@ -255,11 +286,25 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
         else:
             set_state(previous_state)
         if not submitted:
+            _log.warning(
+                "chapter react fallback chapter_id=%s reason=missing_submit_result",
+                chapter_id,
+            )
             return _fallback(state)
 
         payload = submitted.get("payload", {})
         if not isinstance(payload, dict):
+            _log.warning(
+                "chapter react fallback chapter_id=%s reason=invalid_submit_payload",
+                chapter_id,
+            )
             return _fallback(state)
-        return _extract_chapter_result(payload, state.get("chapter_plan", {}))
+        result = _extract_chapter_result(payload, chapter_plan)
+        _log.info(
+            "chapter react end chapter_id=%s quality_keys=%s",
+            chapter_id,
+            sorted(payload.get("quality_scores", {}).keys()) if isinstance(payload.get("quality_scores"), dict) else [],
+        )
+        return result
 
     return run_react_chapter

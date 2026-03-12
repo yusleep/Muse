@@ -574,6 +574,15 @@ def build_citation_subgraph_node(*, services: Any, settings: Any = None):
                 react_result = maybe_result
             recent_trace = _recent_tool_trace(react_result.get("messages", []))
             finalized = get_finalized_citation_review()
+            assessments = finalized.get("assessments", []) if isinstance(finalized, dict) else []
+            _log.info(
+                "citation react invoke_return messages=%d finalized=%s assessments=%d/%d%s",
+                len(react_result.get("messages", [])) if isinstance(react_result.get("messages", []), list) else 0,
+                isinstance(finalized, dict),
+                len(assessments) if isinstance(assessments, list) else 0,
+                len(worklist),
+                _trace_suffix(recent_trace),
+            )
             if not isinstance(finalized, dict):
                 raise CitationAgentExecutionError(
                     "Citation ReAct agent did not finalize the structured citation review."

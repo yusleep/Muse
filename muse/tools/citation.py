@@ -1,6 +1,7 @@
 """Citation tools for both LangChain bindings and ReAct agents."""
 
 import json
+import logging
 import threading
 from typing import Annotated
 from typing import Any, Literal
@@ -17,6 +18,7 @@ MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
 
 
 _local = threading.local()
+_log = logging.getLogger("muse.citation.tools")
 
 
 class VerifyDoiInput(BaseModel):
@@ -467,6 +469,14 @@ def record_citation_assessment(
         "evidence_excerpt": str(evidence_excerpt or work_item.get("evidence") or ""),
     }
     session["finalized_payload"] = None
+    _log.info(
+        "record assessment cite_key=%s claim_id=%s verdict=%s confidence=%s support_score=%.2f",
+        pair[0],
+        pair[1],
+        normalized_verdict,
+        normalized_confidence,
+        bounded_score,
+    )
     return f"Recorded citation assessment for {pair[0]} / {pair[1]}."
 
 
@@ -484,9 +494,19 @@ def finalize_citation_review(summary: str) -> str:
     if missing:
         session["finalized_payload"] = None
         missing_text = ", ".join(f"{item['cite_key']} / {item['claim_id']}" for item in missing)
+        _log.warning(
+            "finalize review blocked missing=%d summary=%s",
+            len(missing),
+            summary,
+        )
         return f"[citation review error] missing assessments: {missing_text}"
 
     session["finalized_payload"] = _finalized_citation_payload(session, summary=summary)
+    _log.info(
+        "finalize review completed assessments=%d summary=%s",
+        len(records),
+        summary,
+    )
     return f"Citation review completed. Summary: {summary}"
 
 

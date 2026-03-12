@@ -109,6 +109,46 @@ class CitationToolTests(unittest.TestCase):
         finally:
             clear_citation_review_session()
 
+    def test_record_and_finalize_emit_runtime_logs(self):
+        from muse.tools.citation import (
+            clear_citation_review_session,
+            finalize_citation_review,
+            prepare_citation_review_session,
+            record_citation_assessment,
+        )
+
+        prepare_citation_review_session(
+            [
+                {
+                    "cite_key": "@smith2024",
+                    "claim_id": "c1",
+                    "claim": "Claim text.",
+                    "evidence": "Supporting evidence.",
+                }
+            ]
+        )
+        try:
+            with self.assertLogs("muse.citation.tools", level="INFO") as logs:
+                record_citation_assessment.invoke(
+                    {
+                        "cite_key": "@smith2024",
+                        "claim_id": "c1",
+                        "verdict": "verified",
+                        "support_score": 0.95,
+                        "confidence": "high",
+                        "reason": "supported",
+                        "detail": "Evidence matches claim.",
+                        "evidence_excerpt": "Supporting evidence.",
+                    }
+                )
+                finalize_citation_review.invoke({"summary": "done"})
+
+            joined = "\n".join(logs.output)
+            self.assertIn("record assessment cite_key=@smith2024 claim_id=c1 verdict=verified", joined)
+            self.assertIn("finalize review completed assessments=1", joined)
+        finally:
+            clear_citation_review_session()
+
     def test_finalize_citation_review_rejects_missing_assessments(self):
         from muse.tools.citation import (
             clear_citation_review_session,
