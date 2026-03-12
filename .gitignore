@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+runs/
+*.Zone.Identifier
+.env
+/config.yaml
+.venv/
+.worktrees/
+.ralph-tui/
+refs/.index/
+model-router.claude-code.json
+ref/
+refs-papers/
+Archives/
+
+# Local research / planning notes
+/Research*.md
+/muse-plan-v2.md
+/CODEX_PROMPTS.md
+/AGENTS.md
+/PLANS.md
+/PROGRESS.md
+/docs/plans/

@@ -1,0 +1,85 @@
+"""Tests for muse/tools/writing.py"""
+
+from __future__ import annotations
+
+import unittest
+
+
+class _FakeLLM:
+    def structured(self, *, system, user, route="default", max_tokens=2500):
+        return {
+            "text": "Generated section text about the topic.",
+            "citations_used": ["@smith2024"],
+            "key_claims": ["Claim A."],
+            "transition_out": "",
+            "glossary_additions": {},
+            "self_assessment": {
+                "confidence": 0.7,
+                "weak_spots": [],
+                "needs_revision": False,
+            },
+        }
+
+    def text(self, *, system, user, route="default", max_tokens=2500):
+        return "Revised section text."
+
+
+class WriteSectionToolTests(unittest.TestCase):
+    def test_write_section_returns_text_and_citations(self):
+        from muse.tools.writing import write_section
+
+        result = write_section.invoke(
+            {
+                "chapter_title": "Introduction",
+                "subtask_id": "sub_01",
+                "subtask_title": "Background",
+                "target_words": 1200,
+                "topic": "LangGraph thesis automation",
+                "language": "zh",
+                "references_json": '[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            }
+        )
+        self.assertIsInstance(result, str)
+        self.assertIn("text", result)
+
+    def test_revise_section_returns_revised_text(self):
+        from muse.tools.writing import revise_section
+
+        result = revise_section.invoke(
+            {
+                "section_text": "Original text here.",
+                "instruction": "Improve transitions between paragraphs.",
+                "chapter_title": "Introduction",
+                "language": "zh",
+            }
+        )
+        self.assertIsInstance(result, str)
+
+    def test_apply_patch_replaces_old_with_new(self):
+        from muse.tools.writing import apply_patch
+
+        result = apply_patch.invoke(
+            {
+                "section_text": "The quick brown fox jumps over the lazy dog.",
+                "old_string": "quick brown fox",
+                "new_string": "slow red cat",
+            }
+        )
+        self.assertIn("slow red cat", result)
+        self.assertNotIn("quick brown fox", result)
+
+    def test_apply_patch_reports_not_found(self):
+        from muse.tools.writing import apply_patch
+
+        result = apply_patch.invoke(
+            {
+                "section_text": "Hello world.",
+                "old_string": "nonexistent string",
+                "new_string": "replacement",
+            }
+        )
+        self.assertIn("not found", result.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()
