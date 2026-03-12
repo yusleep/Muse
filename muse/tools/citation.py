@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import threading
+from typing import Any, Literal
 
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
+
+
+_local = threading.local()
 
 
 class VerifyDoiInput(BaseModel):
@@ -83,6 +87,231 @@ def make_crosscheck_metadata_tool(metadata_client: Any) -> BaseTool:
     return CrosscheckMetadataTool(metadata_client=metadata_client)
 
 
+class RecordCitationAssessmentInput(BaseModel):
+    """Structured citation verdict recorded for one cite_key/claim_id pair."""
+
+    cite_key: str = Field(description="Exact citation key from the worklist")
+    claim_id: str = Field(description="Exact claim identifier from the worklist")
+    verdict: Literal["verified", "flagged", "repaired"] = Field(
+        description="Final verdict for this citation/claim pair"
+    )
+    support_score: float = Field(
+        description="Support score between 0.0 and 1.0 after verification"
+    )
+    confidence: Literal["low", "medium", "high"] = Field(
+        description="Confidence level for the verdict"
+    )
+    reason: str = Field(description="Short reason code such as supported or metadata_mismatch")
+    detail: str = Field(default="", description="Human-readable rationale for the verdict")
+    evidence_excerpt: str = Field(
+        default="",
+        description="Short evidence excerpt supporting the verdict",
+    )
+
+
+class FinalizeCitationReviewInput(BaseModel):
+    """Input schema for completing the citation review session."""
+
+    summary: str = Field(description="Brief summary of the completed review")
+
+
+def _active_review_session() -> dict[str, Any] | None:
+    session = getattr(_local, "citation_review_session", None)
+    return session if isinstance(session, dict) else None
+
+
+def _pair_key(cite_key: str, claim_id: str) -> tuple[str, str]:
+    return (str(cite_key or "").strip(), str(claim_id or "").strip())
+
+
+def _normalize_work_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    cite_key, claim_id = _pair_key(item.get("cite_key", ""), item.get("claim_id", ""))
+    if not cite_key or not claim_id:
+        return None
+
+    reference = item.get("reference")
+    if not isinstance(reference, dict):
+        reference = {}
+
+    normalized = {
+        "cite_key": cite_key,
+        "claim_id": claim_id,
+        "claim": str(item.get("claim") or ""),
+        "evidence": str(item.get("evidence") or ""),
+        "metadata_status": str(item.get("metadata_status") or ""),
+        "reference": reference,
+    }
+    return normalized
+
+
+def prepare_citation_review_session(worklist: list[dict[str, Any]]) -> None:
+    """Initialize thread-local citation review state for one agent run."""
+
+    normalized: list[dict[str, Any]] = []
+    worklist_lookup: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in worklist:
+        if not isinstance(item, dict):
+            continue
+        normalized_item = _normalize_work_item(item)
+        if normalized_item is None:
+            continue
+        normalized.append(normalized_item)
+        worklist_lookup[_pair_key(normalized_item["cite_key"], normalized_item["claim_id"])] = normalized_item
+
+    _local.citation_review_session = {
+        "worklist": normalized,
+        "worklist_lookup": worklist_lookup,
+        "records": {},
+        "finalized_payload": None,
+    }
+
+
+def clear_citation_review_session() -> None:
+    """Clear any active citation review session for the current thread."""
+
+    if hasattr(_local, "citation_review_session"):
+        delattr(_local, "citation_review_session")
+
+
+def get_finalized_citation_review() -> dict[str, Any] | None:
+    """Return the finalized citation review payload, if one exists."""
+
+    session = _active_review_session()
+    if session is None:
+        return None
+    payload = session.get("finalized_payload")
+    return payload if isinstance(payload, dict) else None
+
+
+def _coerce_authors(authors: Any) -> list[str]:
+    if isinstance(authors, list):
+        return [str(author).strip() for author in authors if str(author).strip()]
+    if not isinstance(authors, str):
+        return []
+
+    stripped = authors.strip()
+    if not stripped:
+        return []
+
+    if stripped.startswith("["):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(author).strip() for author in parsed if str(author).strip()]
+
+    return [part.strip() for part in authors.split(",") if part.strip()]
+
+
+def _build_reference_payload(
+    *,
+    reference_json: str,
+    title: str,
+    authors: Any,
+    year: Any,
+    doi: str,
+    ref_id: str,
+) -> dict[str, Any]:
+    if reference_json:
+        try:
+            reference = json.loads(reference_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return reference if isinstance(reference, dict) else {}
+
+    year_text = str(year or "").strip()
+    return {
+        "ref_id": ref_id or "unknown",
+        "title": title,
+        "authors": _coerce_authors(authors),
+        "year": int(year_text) if year_text.isdigit() else year_text or None,
+        "doi": doi or None,
+    }
+
+
+def _missing_pairs(
+    worklist: list[dict[str, Any]],
+    records: dict[tuple[str, str], dict[str, Any]],
+) -> list[dict[str, str]]:
+    missing: list[dict[str, str]] = []
+    for item in worklist:
+        pair = _pair_key(item.get("cite_key", ""), item.get("claim_id", ""))
+        if pair not in records:
+            missing.append({"cite_key": pair[0], "claim_id": pair[1]})
+    return missing
+
+
+def _finalized_citation_payload(session: dict[str, Any], *, summary: str) -> dict[str, Any]:
+    worklist = session.get("worklist", [])
+    records = session.get("records", {})
+    ledger: dict[str, dict[str, Any]] = {}
+    verified_citations: list[str] = []
+    flagged_citations: list[dict[str, Any]] = []
+    assessments: list[dict[str, Any]] = []
+
+    for item in worklist:
+        pair = _pair_key(item.get("cite_key", ""), item.get("claim_id", ""))
+        record = records.get(pair)
+        if not isinstance(record, dict):
+            continue
+
+        cite_key = str(item.get("cite_key") or "")
+        claim_id = str(item.get("claim_id") or "")
+        verdict = str(record.get("verdict") or "flagged")
+        evidence_excerpt = str(record.get("evidence_excerpt") or item.get("evidence") or "")[:240]
+        reason = str(record.get("reason") or "unsupported_claim")
+        detail = str(record.get("detail") or "")
+
+        ledger[claim_id] = {
+            "claim": str(item.get("claim") or ""),
+            "cited_source": cite_key,
+            "support_score": float(record.get("support_score") or 0.0),
+            "evidence_excerpt": evidence_excerpt,
+            "confidence": str(record.get("confidence") or "low"),
+            "repair_status": verdict,
+        }
+
+        assessment = {
+            "cite_key": cite_key,
+            "claim_id": claim_id,
+            "verdict": verdict,
+            "support_score": float(record.get("support_score") or 0.0),
+            "confidence": str(record.get("confidence") or "low"),
+            "reason": reason,
+            "detail": detail,
+            "evidence_excerpt": evidence_excerpt,
+        }
+        assessments.append(assessment)
+
+        if verdict == "verified":
+            if cite_key and cite_key not in verified_citations:
+                verified_citations.append(cite_key)
+            continue
+
+        flagged_citations.append(
+            {
+                "cite_key": cite_key,
+                "reason": reason,
+                "claim_id": claim_id,
+                "detail": detail or None,
+            }
+        )
+
+    return {
+        "citation_ledger": ledger,
+        "verified_citations": verified_citations,
+        "flagged_citations": flagged_citations,
+        "assessments": assessments,
+        "coverage": {
+            "expected_pairs": len(worklist),
+            "recorded_pairs": len(assessments),
+            "missing_pairs": [],
+        },
+        "summary": summary,
+    }
+
+
 @tool
 def verify_doi(doi: str) -> str:
     """Verify that a DOI resolves to a valid record."""
@@ -125,14 +354,27 @@ def verify_doi(doi: str) -> str:
 
 
 @tool
-def crosscheck_metadata(reference_json: str) -> str:
+def crosscheck_metadata(
+    reference_json: str = "",
+    title: str = "",
+    authors: str = "",
+    year: str = "",
+    doi: str = "",
+    ref_id: str = "",
+) -> str:
     """Cross-check a reference object's metadata for consistency."""
 
     from muse.tools._context import get_services
 
-    try:
-        reference = json.loads(reference_json)
-    except (json.JSONDecodeError, TypeError):
+    reference = _build_reference_payload(
+        reference_json=reference_json,
+        title=title,
+        authors=authors,
+        year=year,
+        doi=doi,
+        ref_id=ref_id,
+    )
+    if not reference:
         return json.dumps(
             {
                 "ref_id": "unknown",
@@ -141,9 +383,6 @@ def crosscheck_metadata(reference_json: str) -> str:
             },
             ensure_ascii=False,
         )
-
-    if not isinstance(reference, dict):
-        reference = {}
 
     issues: list[str] = []
     if not reference.get("title"):
@@ -170,6 +409,71 @@ def crosscheck_metadata(reference_json: str) -> str:
         },
         ensure_ascii=False,
     )
+
+
+@tool(args_schema=RecordCitationAssessmentInput)
+def record_citation_assessment(
+    cite_key: str,
+    claim_id: str,
+    verdict: str,
+    support_score: float,
+    confidence: str,
+    reason: str,
+    detail: str = "",
+    evidence_excerpt: str = "",
+) -> str:
+    """Record the final verdict for one citation/claim pair in the active review."""
+
+    session = _active_review_session()
+    if session is None:
+        return "[citation review error] no active citation review session."
+
+    pair = _pair_key(cite_key, claim_id)
+    work_item = session.get("worklist_lookup", {}).get(pair)
+    if not isinstance(work_item, dict):
+        return f"[citation review error] unknown citation pair: {cite_key} / {claim_id}"
+
+    normalized_confidence = str(confidence or "").strip().lower() or "low"
+    if normalized_confidence not in {"low", "medium", "high"}:
+        return f"[citation review error] invalid confidence: {confidence}"
+
+    normalized_verdict = str(verdict or "").strip().lower() or "flagged"
+    if normalized_verdict not in {"verified", "flagged", "repaired"}:
+        return f"[citation review error] invalid verdict: {verdict}"
+
+    bounded_score = max(0.0, min(1.0, float(support_score)))
+    session["records"][pair] = {
+        "cite_key": pair[0],
+        "claim_id": pair[1],
+        "verdict": normalized_verdict,
+        "support_score": bounded_score,
+        "confidence": normalized_confidence,
+        "reason": str(reason or "unsupported_claim"),
+        "detail": str(detail or ""),
+        "evidence_excerpt": str(evidence_excerpt or work_item.get("evidence") or ""),
+    }
+    session["finalized_payload"] = None
+    return f"Recorded citation assessment for {pair[0]} / {pair[1]}."
+
+
+@tool(args_schema=FinalizeCitationReviewInput)
+def finalize_citation_review(summary: str) -> str:
+    """Finalize the active citation review after every worklist item is recorded."""
+
+    session = _active_review_session()
+    if session is None:
+        return "[citation review error] no active citation review session."
+
+    worklist = session.get("worklist", [])
+    records = session.get("records", {})
+    missing = _missing_pairs(worklist, records)
+    if missing:
+        session["finalized_payload"] = None
+        missing_text = ", ".join(f"{item['cite_key']} / {item['claim_id']}" for item in missing)
+        return f"[citation review error] missing assessments: {missing_text}"
+
+    session["finalized_payload"] = _finalized_citation_payload(session, summary=summary)
+    return f"Citation review completed. Summary: {summary}"
 
 
 @tool

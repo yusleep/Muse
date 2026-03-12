@@ -66,6 +66,74 @@ class CitationToolTests(unittest.TestCase):
         parsed = json.loads(result)
         self.assertEqual(parsed["action"], "replace_source")
 
+    def test_record_and_finalize_citation_review(self):
+        from muse.tools.citation import (
+            clear_citation_review_session,
+            finalize_citation_review,
+            get_finalized_citation_review,
+            prepare_citation_review_session,
+            record_citation_assessment,
+        )
+
+        prepare_citation_review_session(
+            [
+                {
+                    "cite_key": "@smith2024",
+                    "claim_id": "c1",
+                    "claim": "Claim text.",
+                    "evidence": "Supporting evidence.",
+                }
+            ]
+        )
+        try:
+            record_result = record_citation_assessment.invoke(
+                {
+                    "cite_key": "@smith2024",
+                    "claim_id": "c1",
+                    "verdict": "verified",
+                    "support_score": 0.95,
+                    "confidence": "high",
+                    "reason": "supported",
+                    "detail": "Evidence matches claim.",
+                    "evidence_excerpt": "Supporting evidence.",
+                }
+            )
+            self.assertIn("recorded", record_result.lower())
+
+            finalize_result = finalize_citation_review.invoke({"summary": "done"})
+            self.assertIn("completed", finalize_result.lower())
+
+            payload = get_finalized_citation_review()
+            self.assertIsInstance(payload, dict)
+            self.assertEqual(payload["verified_citations"], ["@smith2024"])
+            self.assertEqual(payload["flagged_citations"], [])
+            self.assertIn("c1", payload["citation_ledger"])
+        finally:
+            clear_citation_review_session()
+
+    def test_finalize_citation_review_rejects_missing_assessments(self):
+        from muse.tools.citation import (
+            clear_citation_review_session,
+            finalize_citation_review,
+            prepare_citation_review_session,
+        )
+
+        prepare_citation_review_session(
+            [
+                {
+                    "cite_key": "@smith2024",
+                    "claim_id": "c1",
+                    "claim": "Claim text.",
+                    "evidence": "Supporting evidence.",
+                }
+            ]
+        )
+        try:
+            result = finalize_citation_review.invoke({"summary": "done"})
+            self.assertIn("error", result.lower())
+        finally:
+            clear_citation_review_session()
+
 
 if __name__ == "__main__":
     unittest.main()

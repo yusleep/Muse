@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from muse.config import Settings
 from muse.graph.launcher import build_graph, invoke
@@ -100,6 +101,28 @@ class _Services:
         self.rag_index = None
 
 
+class _FinalizingCitationReactAgent:
+    def invoke(self, agent_input, config):
+        del config
+        from muse.tools.citation import finalize_citation_review, record_citation_assessment
+
+        for item in agent_input.get("citation_worklist", []):
+            record_citation_assessment.invoke(
+                {
+                    "cite_key": item["cite_key"],
+                    "claim_id": item["claim_id"],
+                    "verdict": "verified",
+                    "support_score": 0.95,
+                    "confidence": "high",
+                    "reason": "supported",
+                    "detail": "Runtime flow citation verified.",
+                    "evidence_excerpt": item.get("evidence", ""),
+                }
+            )
+        finalize_citation_review.invoke({"summary": "runtime flow citation review complete"})
+        return {"messages": []}
+
+
 class RuntimeFlowTests(unittest.TestCase):
     def _make_settings(self, runs_dir: str) -> Settings:
         return Settings(
@@ -137,20 +160,29 @@ class RuntimeFlowTests(unittest.TestCase):
 
     def test_graph_auto_approve_runs_to_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
-            graph = build_graph(self._make_settings(tmp), services=_Services(), thread_id="flow-done", auto_approve=True)
+            with patch(
+                "muse.graph.subgraphs.citation._build_react_citation_agent",
+                return_value=_FinalizingCitationReactAgent(),
+            ):
+                graph = build_graph(
+                    self._make_settings(tmp),
+                    services=_Services(),
+                    thread_id="flow-done",
+                    auto_approve=True,
+                )
 
-            result = invoke(
-                graph,
-                {
-                    "project_id": "flow-done",
-                    "topic": "LangGraph thesis automation",
-                    "discipline": "Computer Science",
-                    "language": "zh",
-                    "format_standard": "GB/T 7714-2015",
-                    "output_format": "markdown",
-                },
-                thread_id="flow-done",
-            )
+                result = invoke(
+                    graph,
+                    {
+                        "project_id": "flow-done",
+                        "topic": "LangGraph thesis automation",
+                        "discipline": "Computer Science",
+                        "language": "zh",
+                        "format_standard": "GB/T 7714-2015",
+                        "output_format": "markdown",
+                    },
+                    thread_id="flow-done",
+                )
 
             self.assertNotIn("__interrupt__", result)
             self.assertEqual(result["verified_citations"], ["@smith2024graph"])

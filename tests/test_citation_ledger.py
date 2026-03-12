@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from muse.config import Settings
 
@@ -163,6 +164,28 @@ class CitationLedgerTests(unittest.TestCase):
         self.assertEqual(metadata.metadata_checks, ["@smith2024graph"])
 
 
+class _FinalizingCitationReactAgent:
+    def invoke(self, agent_input, config):
+        del config
+        from muse.tools.citation import finalize_citation_review, record_citation_assessment
+
+        for item in agent_input.get("citation_worklist", []):
+            record_citation_assessment.invoke(
+                {
+                    "cite_key": item["cite_key"],
+                    "claim_id": item["claim_id"],
+                    "verdict": "verified",
+                    "support_score": 0.95,
+                    "confidence": "high",
+                    "reason": "supported",
+                    "detail": "Citation ledger integration verified.",
+                    "evidence_excerpt": item.get("evidence", ""),
+                }
+            )
+        finalize_citation_review.invoke({"summary": "citation ledger integration complete"})
+        return {"messages": []}
+
+
 class GraphPhase3FlowTests(unittest.TestCase):
     def test_graph_runs_to_markdown_export_with_citation_ledger(self):
         from muse.graph.launcher import build_graph, invoke
@@ -269,19 +292,23 @@ class GraphPhase3FlowTests(unittest.TestCase):
                 refs_dir=None,
                 checkpoint_dir=None,
             )
-            graph = build_graph(settings, services=_Services(), thread_id="run-4", auto_approve=True)
-            result = invoke(
-                graph,
-                {
-                    "project_id": "run-4",
-                    "topic": "LangGraph thesis automation",
-                    "discipline": "Computer Science",
-                    "language": "zh",
-                    "format_standard": "GB/T 7714-2015",
-                    "output_format": "markdown",
-                },
-                thread_id="run-4",
-            )
+            with patch(
+                "muse.graph.subgraphs.citation._build_react_citation_agent",
+                return_value=_FinalizingCitationReactAgent(),
+            ):
+                graph = build_graph(settings, services=_Services(), thread_id="run-4", auto_approve=True)
+                result = invoke(
+                    graph,
+                    {
+                        "project_id": "run-4",
+                        "topic": "LangGraph thesis automation",
+                        "discipline": "Computer Science",
+                        "language": "zh",
+                        "format_standard": "GB/T 7714-2015",
+                        "output_format": "markdown",
+                    },
+                    thread_id="run-4",
+                )
 
             self.assertTrue(result["citation_ledger"])
             self.assertTrue(Path(result["output_filepath"]).exists())
