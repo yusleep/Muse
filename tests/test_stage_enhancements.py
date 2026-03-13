@@ -262,6 +262,115 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
         self.assertIn("Important abstract", snapshot[0]["abstract"])
 
 
+class TestWriteSubtasksWordCountRetry(unittest.TestCase):
+    def test_short_draft_triggers_one_expansion_retry(self):
+        calls = []
+
+        class _RetryLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                payload = json.loads(user)
+                calls.append(payload)
+                if len(calls) == 1:
+                    return {
+                        "text": "word " * 300,
+                        "citations_used": [],
+                        "key_claims": [],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {"confidence": 0.5, "weak_spots": [], "needs_revision": False},
+                    }
+                return {
+                    "text": "word " * 820,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.6, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_RetryLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn("远低于目标", calls[1].get("revision_instruction", ""))
+        self.assertEqual(results[0]["actual_words"], 820)
+
+    def test_near_target_draft_does_not_retry(self):
+        calls = []
+
+        class _StableLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                calls.append(1)
+                return {
+                    "text": "word " * 950,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_StableLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(results[0]["actual_words"], 950)
+
+    def test_retry_result_must_be_longer_to_replace_original(self):
+        calls = []
+
+        class _WorseRetryLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                calls.append(1)
+                if len(calls) == 1:
+                    return {
+                        "text": "word " * 300,
+                        "citations_used": [],
+                        "key_claims": [],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {"confidence": 0.4, "weak_spots": [], "needs_revision": False},
+                    }
+                return {
+                    "text": "word " * 250,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.5, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_WorseRetryLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(results[0]["actual_words"], 300)
+
+
 # ---------------------------------------------------------------------------
 # Stage 5 per-chapter polish tests
 # ---------------------------------------------------------------------------
