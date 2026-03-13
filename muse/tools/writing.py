@@ -101,6 +101,9 @@ def write_section(
             "key_claims": [],
         }
 
+    if isinstance(output, str):
+        return output
+
     if isinstance(output, dict):
         citations_used = output.get("citations_used", [])
         if not isinstance(citations_used, list):

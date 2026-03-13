@@ -85,6 +85,35 @@ class WriteSectionToolTests(unittest.TestCase):
         payload = json.loads(result)
         self.assertEqual(payload["citations_used"], ["@smith2024"])
 
+    def test_write_section_does_not_double_serialize_string_output(self):
+        from muse.tools._context import set_services
+        from muse.tools.writing import write_section
+
+        class _StringLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, user, route, max_tokens
+                return '{"text":"already serialized","citations_used":["@smith2024"],"key_claims":[]}'
+
+        class _Services:
+            llm = _StringLLM()
+
+        set_services(_Services())
+        result = write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        self.assertEqual(
+            result,
+            '{"text":"already serialized","citations_used":["@smith2024"],"key_claims":[]}',
+        )
+
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 
