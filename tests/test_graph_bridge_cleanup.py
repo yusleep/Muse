@@ -106,7 +106,7 @@ class GraphBridgeCleanupTests(unittest.TestCase):
         )
 
         self.assertEqual(result["quality_scores"]["coherence"], 3)
-        self.assertEqual(result["revision_instructions"], {"sub_01": "补充过渡段。"})
+        self.assertEqual(result["revision_instructions"], {"sub_01": "- 补充过渡段。"})
         self.assertEqual(len(result["review_notes"]), 8)
 
     def test_polish_node_preserves_existing_chapter_results_shape(self):

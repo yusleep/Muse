@@ -117,7 +117,7 @@ class ChapterFlowTests(unittest.TestCase):
         self.assertEqual(route, "revise")
         self.assertEqual(
             build_revision_instructions(review["review_notes"], min_severity=2),
-            {"sub_01": "补充过渡段。"},
+            {"sub_01": "- 补充过渡段。"},
         )
         self.assertEqual(should_iterate(updated, threshold=4), "revise")
 
