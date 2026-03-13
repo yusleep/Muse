@@ -410,6 +410,37 @@ class TestWriteSubtasksCitationAllowlist(unittest.TestCase):
         self.assertTrue(any("hallucinated_citations=1" in message for message in logs.output))
 
 
+class TestWriteSubtasksScopeGuard(unittest.TestCase):
+    def test_write_subtasks_prompt_includes_scope_guard(self):
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {
+                    "text": "word " * 200,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 200}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(seen_systems), 1)
+        self.assertIn("SCOPE GUARD", seen_systems[0])
+
+
 # ---------------------------------------------------------------------------
 # Stage 5 per-chapter polish tests
 # ---------------------------------------------------------------------------

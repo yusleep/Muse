@@ -114,6 +114,40 @@ class WriteSectionToolTests(unittest.TestCase):
             '{"text":"already serialized","citations_used":["@smith2024"],"key_claims":[]}',
         )
 
+    def test_write_section_prompt_includes_scope_guard(self):
+        from muse.tools._context import set_services
+        from muse.tools.writing import write_section
+
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {
+                    "text": "Generated section text about the topic.",
+                    "citations_used": ["@smith2024"],
+                    "key_claims": [],
+                }
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        set_services(_Services())
+        write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        self.assertEqual(len(seen_systems), 1)
+        self.assertIn("SCOPE GUARD", seen_systems[0])
+
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 
