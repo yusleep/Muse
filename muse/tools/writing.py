@@ -60,11 +60,11 @@ def write_section(
             "ref_id": ref.get("ref_id", ""),
             "title": ref.get("title", ""),
             "year": ref.get("year"),
-            "abstract": (ref.get("abstract") or "")[:300],
+            "abstract": ref.get("abstract") or "",
         }
         for ref in references
         if isinstance(ref, dict) and ref.get("ref_id")
-    ][:30]
+    ][:50]
 
     system = (
         "Write one thesis subsection with citations. "

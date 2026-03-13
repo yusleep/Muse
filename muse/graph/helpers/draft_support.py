@@ -101,11 +101,11 @@ def write_subtasks(
                 "ref_id": ref["ref_id"],
                 "title": ref.get("title", ""),
                 "year": ref.get("year"),
-                "abstract": (ref.get("abstract") or "")[:300],
+                "abstract": ref.get("abstract") or "",
             }
             for ref in state.get("references", [])
             if isinstance(ref, dict) and ref.get("ref_id")
-        ][:30]
+        ][:50]
 
         local_context: list[dict[str, Any]] = []
         if rag_index is not None:

@@ -148,6 +148,55 @@ class WriteSectionToolTests(unittest.TestCase):
         self.assertEqual(len(seen_systems), 1)
         self.assertIn("SCOPE GUARD", seen_systems[0])
 
+    def test_write_section_keeps_full_abstract_and_caps_snapshot_at_50(self):
+        from muse.tools._context import set_services
+        from muse.tools.writing import write_section
+
+        long_abstract = "A" * 500
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "Generated section text about the topic.",
+                    "citations_used": ["@r01"],
+                    "key_claims": [],
+                }
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        references_json = json.dumps(
+            [
+                {
+                    "ref_id": f"@r{i:02d}",
+                    "title": f"Reference {i}",
+                    "year": 2024,
+                    "abstract": long_abstract if i == 1 else f"Abstract {i}",
+                }
+                for i in range(1, 52)
+            ],
+            ensure_ascii=False,
+        )
+
+        set_services(_Services())
+        write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json=references_json,
+            runtime=None,
+        )
+
+        snapshot = seen_payloads[0]["available_references"]
+        self.assertEqual(len(snapshot), 50)
+        self.assertEqual(snapshot[0]["abstract"], long_abstract)
+
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 

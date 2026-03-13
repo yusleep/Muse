@@ -261,6 +261,48 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
         self.assertIn("abstract", snapshot[0])
         self.assertIn("Important abstract", snapshot[0]["abstract"])
 
+    def test_write_subtasks_keeps_full_abstract_and_caps_snapshot_at_50(self):
+        long_abstract = "A" * 500
+        refs = [
+            {
+                "ref_id": f"@r{i:02d}",
+                "title": f"Paper {i}",
+                "year": 2023,
+                "abstract": long_abstract if i == 1 else f"Abstract {i}",
+            }
+            for i in range(1, 52)
+        ]
+
+        received_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                payload = json.loads(user)
+                received_payloads.append(payload)
+                return {
+                    "text": "word " * 500,
+                    "citations_used": ["@r01"],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=refs)
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "ch01_s01", "title": "Intro", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        snapshot = received_payloads[0].get("available_references", [])
+        self.assertEqual(len(snapshot), 50)
+        self.assertEqual(snapshot[0]["abstract"], long_abstract)
+
 
 class TestWriteSubtasksWordCountRetry(unittest.TestCase):
     def test_short_draft_triggers_one_expansion_retry(self):

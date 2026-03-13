@@ -11,7 +11,7 @@
 
 ## Wave 1 — Quick Wins
 
-### Phase 1: Prompt & Logic Fixes (7/8)
+### Phase 1: Prompt & Logic Fixes (8/8)
 - [x] Step 1.1: 重写 chapter_review_prompt — 丰富评审 rubric (~80 行)
 - [x] Step 1.2: 字数控制反馈 — 偏差 >30% 自动重试 (~20 行)
 - [x] Step 1.3: Revision 指令合并 — 同 subtask 多条 note 不覆盖 (~8 行)
@@ -19,7 +19,7 @@
 - [x] Step 1.5: References 展示优化 — 扩大 agent 可见范围 (~10 行)
 - [x] Step 1.6: Tool JSON 双重序列化修复 (~5 行)
 - [x] Step 1.7: Subtask 范围提示增强 (~5 行)
-- [ ] Step 1.8: 移除 abstract 截断 — 扩大参考文献上下文 (~10 行)
+- [x] Step 1.8: 移除 abstract 截断 — 扩大参考文献上下文 (~10 行)
 
 ---
 
