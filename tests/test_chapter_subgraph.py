@@ -48,6 +48,33 @@ class _Services:
 
 
 class ChapterSubgraphTests(unittest.TestCase):
+    def test_references_summary_lists_all_ref_ids_but_only_top_20_summaries(self):
+        from muse.graph.subgraphs.chapter import _references_summary
+
+        references = [
+            {
+                "ref_id": f"@ref{i:02d}",
+                "title": f"Reference Title {i}",
+                "year": 2020 + (i % 5),
+            }
+            for i in range(1, 51)
+        ]
+
+        summary = _references_summary(references)
+
+        self.assertIn("50 references available.", summary)
+        self.assertIn("All ref_ids:", summary)
+        self.assertIn("@ref01", summary)
+        self.assertIn("@ref50", summary)
+        self.assertIn("Top 20 summaries:", summary)
+        self.assertIn("- @ref20:", summary)
+        self.assertNotIn("- @ref21:", summary)
+
+    def test_references_summary_handles_empty_list(self):
+        from muse.graph.subgraphs.chapter import _references_summary
+
+        self.assertEqual(_references_summary([]), "0 references available.")
+
     def test_chapter_graph_revises_until_scores_reach_threshold(self):
         from muse.graph.subgraphs.chapter import build_chapter_graph
 

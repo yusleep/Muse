@@ -77,12 +77,23 @@ def build_chapter_graph(*, services: Any):
 def _references_summary(references: list[dict[str, Any]]) -> str:
     if not references:
         return "0 references available."
-    top_refs = ", ".join(
-        str(reference.get("ref_id", "?"))
-        for reference in references[:10]
-        if isinstance(reference, dict)
+    valid_refs = [
+        reference
+        for reference in references
+        if isinstance(reference, dict) and reference.get("ref_id")
+    ]
+    all_ids = ", ".join(str(reference.get("ref_id", "?")) for reference in valid_refs)
+    summaries = []
+    for reference in valid_refs[:20]:
+        title = str(reference.get("title", ""))[:80]
+        year = reference.get("year", "")
+        summaries.append(f"  - {reference['ref_id']}: {title} ({year})")
+    summary_text = "\n".join(summaries)
+    return (
+        f"{len(valid_refs)} references available.\n"
+        f"All ref_ids: {all_ids}\n"
+        f"Top {min(20, len(valid_refs))} summaries:\n{summary_text}"
     )
-    return f"{len(references)} references available. Top refs: {top_refs}"
 
 
 def _extract_chapter_result(
