@@ -181,6 +181,16 @@ def write_subtasks(
         citations_used = out.get("citations_used", [])
         if not isinstance(citations_used, list):
             citations_used = []
+        allowed_set = {ref["ref_id"] for ref in refs_snapshot}
+        hallucinated = [str(c).strip() for c in citations_used if str(c).strip() not in allowed_set]
+        if hallucinated:
+            _log.warning(
+                "subtask %s hallucinated_citations=%d filtered: %s",
+                sid,
+                len(hallucinated),
+                hallucinated[:5],
+            )
+        citations_used = [str(c).strip() for c in citations_used if str(c).strip() in allowed_set]
 
         key_claims = out.get("key_claims", [])
         if not isinstance(key_claims, list):

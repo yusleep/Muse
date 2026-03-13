@@ -371,6 +371,45 @@ class TestWriteSubtasksWordCountRetry(unittest.TestCase):
         self.assertEqual(results[0]["actual_words"], 300)
 
 
+class TestWriteSubtasksCitationAllowlist(unittest.TestCase):
+    def test_write_subtasks_filters_hallucinated_citations_and_logs_warning(self):
+        class _CitationLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                return {
+                    "text": "Subsection text.",
+                    "citations_used": ["@r1", "@hallucinated"],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[
+                {
+                    "ref_id": "@r1",
+                    "title": "Paper",
+                    "year": 2024,
+                    "abstract": "Known abstract",
+                }
+            ]
+        )
+
+        with self.assertLogs("muse.draft", level="WARNING") as logs:
+            results = write_subtasks(
+                llm_client=_CitationLLM(),
+                state=state,
+                chapter_title="Chapter 1",
+                subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 200}],
+                revision_instructions={},
+                previous=[],
+            )
+
+        self.assertEqual(results[0]["citations_used"], ["@r1"])
+        self.assertTrue(any("hallucinated_citations=1" in message for message in logs.output))
+
+
 # ---------------------------------------------------------------------------
 # Stage 5 per-chapter polish tests
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 """Writing tools for the chapter ReAct agent."""
 
 import json
+import logging
 from typing import Annotated
 from typing import Any
 
@@ -11,6 +12,7 @@ from langchain_core.tools import tool
 from muse.tools._context import AgentRuntimeContext
 
 MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
+_log = logging.getLogger("muse.draft")
 
 
 def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
@@ -98,6 +100,21 @@ def write_section(
             "citations_used": [],
             "key_claims": [],
         }
+
+    if isinstance(output, dict):
+        citations_used = output.get("citations_used", [])
+        if not isinstance(citations_used, list):
+            citations_used = []
+        allowed_set = {ref["ref_id"] for ref in refs_snapshot}
+        hallucinated = [str(c).strip() for c in citations_used if str(c).strip() not in allowed_set]
+        if hallucinated:
+            _log.warning(
+                "write_section subtask=%s hallucinated_citations=%d filtered: %s",
+                subtask_id,
+                len(hallucinated),
+                hallucinated[:5],
+            )
+        output["citations_used"] = [str(c).strip() for c in citations_used if str(c).strip() in allowed_set]
 
     return json.dumps(output, ensure_ascii=False)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 
@@ -45,6 +46,44 @@ class WriteSectionToolTests(unittest.TestCase):
         )
         self.assertIsInstance(result, str)
         self.assertIn("text", result)
+
+    def test_write_section_filters_citations_to_allowed_refs(self):
+        from muse.tools._context import set_services
+        from muse.tools.writing import write_section
+
+        class _HallucinatingLLM(_FakeLLM):
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, user, route, max_tokens
+                return {
+                    "text": "Generated section text about the topic.",
+                    "citations_used": ["@smith2024", "@fake2024"],
+                    "key_claims": ["Claim A."],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {
+                        "confidence": 0.7,
+                        "weak_spots": [],
+                        "needs_revision": False,
+                    },
+                }
+
+        class _Services:
+            llm = _HallucinatingLLM()
+
+        set_services(_Services())
+        result = write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        payload = json.loads(result)
+        self.assertEqual(payload["citations_used"], ["@smith2024"])
 
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
