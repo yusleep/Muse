@@ -68,6 +68,32 @@ class _PolishServices:
 
 
 class GraphBridgeCleanupTests(unittest.TestCase):
+    def test_chapter_review_node_uses_lens_specific_prompt_contract(self):
+        from muse.graph.nodes.review import build_chapter_review_node
+
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {"scores": {}, "review_notes": []}
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        node = build_chapter_review_node(_Services())
+        node(
+            {
+                "chapter_plan": {"chapter_title": "绪论"},
+                "merged_text": "已有草稿。",
+            }
+        )
+
+        self.assertEqual(len(seen_systems), 4)
+        self.assertTrue(all("Primary review lens:" in system for system in seen_systems))
+        self.assertTrue(all("Focus primarily on" not in system for system in seen_systems))
+
     def test_chapter_review_node_builds_revision_instructions_from_review_notes(self):
         from muse.graph.nodes.review import build_chapter_review_node
 

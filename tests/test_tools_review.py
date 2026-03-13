@@ -55,6 +55,33 @@ class SelfReviewToolTests(unittest.TestCase):
         result = json.loads(result_str)
         self.assertIn("scores", result)
 
+    def test_self_review_uses_lens_specific_prompt_contract(self):
+        from muse.tools._context import set_services
+        from muse.tools.review import self_review
+
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {"scores": {}, "review_notes": []}
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        set_services(_Services())
+        self_review.func(
+            chapter_title="Methods",
+            merged_text="Methods text.",
+            lenses="logic",
+            runtime=None,
+        )
+
+        self.assertEqual(len(seen_systems), 1)
+        self.assertIn("Primary review lens: logic", seen_systems[0])
+        self.assertNotIn("Focus primarily on logic.", seen_systems[0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@ from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
 from muse.graph.helpers.review_state import build_revision_instructions
-from muse.prompts.chapter_review import chapter_review_prompt
+from muse.prompts.chapter_review import chapter_review_prompt_for_lens
 from muse.tools._context import AgentRuntimeContext
 
 MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
@@ -41,8 +41,7 @@ def self_review(
     packets: list[dict[str, Any]] = []
     if llm is not None:
         for lens in lens_list:
-            system, user = chapter_review_prompt(chapter_title, merged_text)
-            system = f"{system} Focus primarily on {lens}."
+            system, user = chapter_review_prompt_for_lens(chapter_title, merged_text, lens)
             try:
                 payload = llm.structured(
                     system=system,
