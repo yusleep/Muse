@@ -108,6 +108,16 @@ class GlobalReviewPromptTests(unittest.TestCase):
         )
         self.assertIn('"persona": "logic"', payload)
 
+    def test_coherence_check_prompt_defines_score_and_issue_contract(self):
+        from muse.prompts.coherence_check import coherence_check_prompt
+
+        system, user = coherence_check_prompt("Full thesis draft with multiple sections.")
+
+        self.assertIn("coherence_score", system)
+        self.assertIn("missing_transition", system)
+        self.assertIn("unsupported_claim", system)
+        self.assertIn('"text": "Full thesis draft with multiple sections."', user)
+
 
 if __name__ == "__main__":
     unittest.main()

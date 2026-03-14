@@ -17,6 +17,7 @@ from muse.graph.nodes import (
     build_merge_chapters_node,
     build_outline_node,
     build_polish_node,
+    build_coherence_check_node,
     build_search_node,
 )
 from muse.graph.nodes.draft import fan_out_chapters
@@ -125,6 +126,15 @@ def build_graph(
             services,
         ),
     )
+    builder.add_node(
+        "coherence_check",
+        _wrap(
+            build_coherence_check_node(services=services),
+            "coherence_check",
+            settings,
+            services,
+        ),
+    )
     if review_mode != "classic":
         builder.add_node(
             "global_review",
@@ -170,9 +180,11 @@ def build_graph(
     builder.add_conditional_edges("approve_outline", fan_out_chapters, ["chapter_subgraph"])
     builder.add_edge("chapter_subgraph", "merge_chapters")
     if review_mode == "classic":
-        builder.add_edge("merge_chapters", "citation_subgraph")
+        builder.add_edge("merge_chapters", "coherence_check")
+        builder.add_edge("coherence_check", "citation_subgraph")
     else:
-        builder.add_edge("merge_chapters", "global_review")
+        builder.add_edge("merge_chapters", "coherence_check")
+        builder.add_edge("coherence_check", "global_review")
         builder.add_edge("global_review", "citation_subgraph")
     builder.add_edge("citation_subgraph", "polish")
     builder.add_edge("polish", "composition_subgraph")

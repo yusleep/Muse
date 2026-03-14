@@ -143,7 +143,9 @@ class GraphShellTests(unittest.TestCase):
 
             self.assertNotIn("review_draft", graph_repr.nodes)
             self.assertNotIn("global_review", graph_repr.nodes)
-            self.assertIn(("merge_chapters", "citation_subgraph"), edges)
+            self.assertIn("coherence_check", graph_repr.nodes)
+            self.assertIn(("merge_chapters", "coherence_check"), edges)
+            self.assertIn(("coherence_check", "citation_subgraph"), edges)
 
     def test_build_graph_layered_mode_inserts_global_review_node(self):
         from muse.graph.launcher import build_graph
@@ -167,8 +169,10 @@ class GraphShellTests(unittest.TestCase):
             graph_repr = graph.get_graph()
             edges = {(edge.source, edge.target) for edge in graph_repr.edges}
 
+            self.assertIn("coherence_check", graph_repr.nodes)
             self.assertIn("global_review", graph_repr.nodes)
-            self.assertIn(("merge_chapters", "global_review"), edges)
+            self.assertIn(("merge_chapters", "coherence_check"), edges)
+            self.assertIn(("coherence_check", "global_review"), edges)
             self.assertIn(("global_review", "citation_subgraph"), edges)
 
 

@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：2/5 phases, 17/28 steps
-- **当前 Wave**：Wave 3
-- **下一步**：Phase 3 Step 3.5
+- **总进度**：3/5 phases, 18/28 steps
+- **当前 Wave**：Wave 4
+- **下一步**：Phase 4 Step 4.1
 
 ---
 
@@ -36,12 +36,12 @@
 
 ## Wave 3 — Review Architecture
 
-### Phase 3: Global Review (Post-Merge) (4/5)
+### Phase 3: Global Review (Post-Merge) (5/5)
 - [x] Step 3.1: 生成-评审闭环 — Reviewer 从修订效果中学习 (~80 行)
 - [x] Step 3.2: 多视角 Critique + Judge — 3 Persona 独立评审 (~200 行)
 - [x] Step 3.3: 分层深度修订 — Structural → Content → Line (~250 行)
 - [x] Step 3.4: 智能模型路由优化 (~25 行)
-- [ ] Step 3.5: Coherence Check — 合并后连贯性验证 (~110 行)
+- [x] Step 3.5: Coherence Check — 合并后连贯性验证 (~110 行)
 
 ---
 
@@ -81,3 +81,4 @@
 - 2026-03-14: 完成 Phase 3 Step 3.2，新增 reviewer personas、judge 合成与 fallback 合并
 - 2026-03-14: 完成 Phase 3 Step 3.3，接入 layered global review subgraph 并移除 draft interrupt
 - 2026-03-14: 完成 Phase 3 Step 3.4，细化 writing/review 路由并接入 review.mode 配置
+- 2026-03-14: 完成 Phase 3 Step 3.5，在 merge 后新增 coherence_check 节点并把严重连贯性问题注入 review_notes

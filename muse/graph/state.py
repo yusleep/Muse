@@ -41,6 +41,7 @@ class MuseState(TypedDict, total=False):
     content_iterations: int
     line_iterations: int
     review_layer: str
+    coherence_issues: list[dict[str, Any]]
     revision_instructions: Annotated[dict[str, str], _merge_dict]
     citation_uses: Annotated[list[dict[str, Any]], operator.add]
     citation_ledger: Annotated[dict[str, Any], _merge_dict]

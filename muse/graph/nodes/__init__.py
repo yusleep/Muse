@@ -1,3 +1,4 @@
+from .coherence_check import build_coherence_check_node
 from .export import build_export_node
 from .initialize import build_initialize_node
 from .merge import build_merge_chapters_node
@@ -8,6 +9,7 @@ from .search import build_search_node
 
 __all__ = [
     "build_chapter_review_node",
+    "build_coherence_check_node",
     "build_export_node",
     "build_global_review_node",
     "build_initialize_node",

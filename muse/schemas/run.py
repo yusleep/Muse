@@ -28,6 +28,7 @@ class ThesisState(TypedDict):
     content_iterations: int
     line_iterations: int
     review_layer: str
+    coherence_issues: list[dict[str, Any]]
     citation_uses: list[CitationUse]
     claim_text_by_id: dict[str, str]
     verified_citations: list[str]
@@ -95,6 +96,7 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "content_iterations": 0,
     "line_iterations": 0,
     "review_layer": "",
+    "coherence_issues": [],
     "citation_uses": [],
     "claim_text_by_id": {},
     "verified_citations": [],
@@ -152,6 +154,7 @@ def new_thesis_state(
         content_iterations=0,
         line_iterations=0,
         review_layer="",
+        coherence_issues=[],
         citation_uses=[],
         claim_text_by_id={},
         verified_citations=[],

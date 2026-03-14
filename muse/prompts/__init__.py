@@ -1,6 +1,7 @@
 from .abstracts import abstract_en_prompt, abstract_zh_prompt
 from .adaptive_review import adaptive_review_prompt
 from .chapter_review import chapter_review_prompt, chapter_review_prompt_for_lens
+from .coherence_check import coherence_check_prompt
 from .global_review import global_review_prompt_for_lens
 from .layered_review import layered_review_prompt, layered_revision_prompt
 from .outline_gen import outline_gen_prompt
@@ -17,6 +18,7 @@ __all__ = [
     "adaptive_review_prompt",
     "chapter_review_prompt",
     "chapter_review_prompt_for_lens",
+    "coherence_check_prompt",
     "global_review_prompt_for_lens",
     "layered_review_prompt",
     "layered_revision_prompt",
