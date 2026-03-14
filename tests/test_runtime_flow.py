@@ -123,6 +123,69 @@ class _FinalizingCitationReactAgent:
         return {"messages": []}
 
 
+class _FinalizingChapterReactAgent:
+    def invoke(self, agent_input, config, **kwargs):
+        del config, kwargs
+        import json
+
+        from muse.tools.orchestration import submit_result
+
+        chapter_plan = agent_input["chapter_plan"]
+        chapter_id = chapter_plan["chapter_id"]
+        subtask_results = []
+        citation_uses = []
+        claim_text_by_id = {}
+
+        for subtask in chapter_plan.get("subtask_plan", []):
+            claim_id = f"{chapter_id}_{subtask['subtask_id']}_c01"
+            claim_text = f"{subtask['title']} improves durability."
+            text = f"{subtask['title']} drafted content with citation."
+            subtask_results.append(
+                {
+                    "subtask_id": subtask["subtask_id"],
+                    "title": subtask["title"],
+                    "output_text": text,
+                    "actual_words": len(text.split()),
+                    "citations_used": ["@smith2024graph"],
+                    "key_claims": [claim_text],
+                }
+            )
+            claim_text_by_id[claim_id] = claim_text
+            citation_uses.append(
+                {
+                    "cite_key": "@smith2024graph",
+                    "claim_id": claim_id,
+                    "chapter_id": chapter_id,
+                    "subtask_id": subtask["subtask_id"],
+                }
+            )
+
+        submit_result.invoke(
+            {
+                "result_json": json.dumps(
+                    {
+                        "merged_text": "\n\n".join(item["output_text"] for item in subtask_results),
+                        "quality_scores": {
+                            "coherence": 4,
+                            "logic": 4,
+                            "citation": 4,
+                            "term_consistency": 4,
+                            "balance": 4,
+                            "redundancy": 4,
+                        },
+                        "iterations_used": 1,
+                        "subtask_results": subtask_results,
+                        "citation_uses": citation_uses,
+                        "claim_text_by_id": claim_text_by_id,
+                    },
+                    ensure_ascii=False,
+                ),
+                "summary": "runtime flow chapter complete",
+            }
+        )
+        return {"messages": []}
+
+
 class RuntimeFlowTests(unittest.TestCase):
     def _make_settings(self, runs_dir: str) -> Settings:
         return Settings(
@@ -161,6 +224,9 @@ class RuntimeFlowTests(unittest.TestCase):
     def test_graph_auto_approve_runs_to_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch(
+                "muse.graph.subgraphs.chapter._build_react_chapter_agent",
+                return_value=_FinalizingChapterReactAgent(),
+            ), patch(
                 "muse.graph.subgraphs.citation._build_react_citation_agent",
                 return_value=_FinalizingCitationReactAgent(),
             ):

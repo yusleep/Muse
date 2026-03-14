@@ -68,6 +68,31 @@ def clear_submitted_result() -> None:
     _local.submitted_result = None
 
 
+def append_partial_subtask_result(result: dict[str, Any]) -> None:
+    """Append one successful subtask output for later partial recovery."""
+
+    partial_results = getattr(_local, "partial_subtask_results", None)
+    if not isinstance(partial_results, list):
+        partial_results = []
+        _local.partial_subtask_results = partial_results
+    partial_results.append(result)
+
+
+def get_partial_subtask_results() -> list[dict[str, Any]]:
+    """Return accumulated successful subtask outputs for the current thread."""
+
+    partial_results = getattr(_local, "partial_subtask_results", [])
+    if not isinstance(partial_results, list):
+        return []
+    return list(partial_results)
+
+
+def clear_partial_subtask_results() -> None:
+    """Reset the partial subtask accumulator for the current thread."""
+
+    _local.partial_subtask_results = []
+
+
 def set_clarification_handler(handler: Callable[..., Any] | None) -> None:
     """Set the runtime clarification handler for the current thread."""
 

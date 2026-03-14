@@ -10,6 +10,7 @@ from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
 from muse.tools._context import AgentRuntimeContext
+from muse.tools.orchestration import append_partial_subtask_result
 
 MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
 _log = logging.getLogger("muse.draft")
@@ -122,6 +123,34 @@ def write_section(
                 hallucinated[:5],
             )
         output["citations_used"] = [str(c).strip() for c in citations_used if str(c).strip() in allowed_set]
+        text = str(output.get("text", "")).strip()
+        key_claims = output.get("key_claims", [])
+        if not isinstance(key_claims, list):
+            key_claims = []
+        assessment = output.get("self_assessment", {})
+        if not isinstance(assessment, dict):
+            assessment = {}
+        if text:
+            append_partial_subtask_result(
+                {
+                    "subtask_id": str(subtask_id),
+                    "title": str(subtask_title),
+                    "target_words": int(target_words),
+                    "output_text": text,
+                    "actual_words": len(text.split()),
+                    "citations_used": output["citations_used"],
+                    "key_claims": [str(claim).strip() for claim in key_claims if str(claim).strip()],
+                    "transition_out": str(output.get("transition_out", "")),
+                    "glossary_additions": output.get("glossary_additions", {})
+                    if isinstance(output.get("glossary_additions", {}), dict)
+                    else {},
+                    "confidence": 0.3,
+                    "weak_spots": assessment.get("weak_spots", [])
+                    if isinstance(assessment.get("weak_spots", []), list)
+                    else [],
+                    "needs_revision": True,
+                }
+            )
 
     return json.dumps(output, ensure_ascii=False)
 

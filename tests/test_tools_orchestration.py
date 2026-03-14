@@ -44,5 +44,41 @@ class UpdatePlanTests(unittest.TestCase):
         self.assertIn("updated", result.lower())
 
 
+class PartialSubtaskAccumulatorTests(unittest.TestCase):
+    def setUp(self):
+        from muse.tools.orchestration import clear_partial_subtask_results
+
+        clear_partial_subtask_results()
+
+    def tearDown(self):
+        from muse.tools.orchestration import clear_partial_subtask_results
+
+        clear_partial_subtask_results()
+
+    def test_append_partial_subtask_results_preserves_order(self):
+        from muse.tools.orchestration import (
+            append_partial_subtask_result,
+            get_partial_subtask_results,
+        )
+
+        append_partial_subtask_result({"subtask_id": "sub_01", "output_text": "First"})
+        append_partial_subtask_result({"subtask_id": "sub_02", "output_text": "Second"})
+
+        results = get_partial_subtask_results()
+        self.assertEqual([item["subtask_id"] for item in results], ["sub_01", "sub_02"])
+
+    def test_clear_partial_subtask_results_resets_accumulator(self):
+        from muse.tools.orchestration import (
+            append_partial_subtask_result,
+            clear_partial_subtask_results,
+            get_partial_subtask_results,
+        )
+
+        append_partial_subtask_result({"subtask_id": "sub_01", "output_text": "First"})
+        clear_partial_subtask_results()
+
+        self.assertEqual(get_partial_subtask_results(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

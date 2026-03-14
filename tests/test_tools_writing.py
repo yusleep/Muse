@@ -197,6 +197,38 @@ class WriteSectionToolTests(unittest.TestCase):
         self.assertEqual(len(snapshot), 50)
         self.assertEqual(snapshot[0]["abstract"], long_abstract)
 
+    def test_write_section_accumulates_partial_result_for_recovery(self):
+        from muse.tools._context import set_services
+        from muse.tools.orchestration import (
+            clear_partial_subtask_results,
+            get_partial_subtask_results,
+        )
+        from muse.tools.writing import write_section
+
+        class _Services:
+            llm = _FakeLLM()
+
+        clear_partial_subtask_results()
+        set_services(_Services())
+        write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        partial_results = get_partial_subtask_results()
+        self.assertEqual(len(partial_results), 1)
+        self.assertEqual(partial_results[0]["subtask_id"], "sub_01")
+        self.assertEqual(partial_results[0]["title"], "Background")
+        self.assertEqual(partial_results[0]["confidence"], 0.3)
+        self.assertTrue(partial_results[0]["needs_revision"])
+        clear_partial_subtask_results()
+
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 
