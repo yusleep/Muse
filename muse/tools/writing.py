@@ -9,6 +9,7 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
+from muse.graph.helpers.draft_support import _build_refs_snapshot
 from muse.tools._context import AgentRuntimeContext
 from muse.tools.orchestration import append_partial_subtask_result
 
@@ -21,6 +22,16 @@ def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
 
     services = services_from_runtime(runtime)
     return services if services is not None else get_services()
+
+
+def _state_from_runtime(runtime: MuseToolRuntime | None) -> dict[str, Any]:
+    if runtime is not None and isinstance(getattr(runtime, "state", None), dict):
+        return runtime.state
+
+    from muse.tools._context import get_state
+
+    state = get_state()
+    return state if isinstance(state, dict) else {}
 
 
 def _normalized_partial_output(output: Any) -> dict[str, Any] | None:
@@ -117,17 +128,9 @@ def write_section(
         references = json.loads(references_json)
     except (json.JSONDecodeError, TypeError):
         references = []
+    tool_state = _state_from_runtime(runtime)
 
-    refs_snapshot = [
-        {
-            "ref_id": ref.get("ref_id", ""),
-            "title": ref.get("title", ""),
-            "year": ref.get("year"),
-            "abstract": ref.get("abstract") or "",
-        }
-        for ref in references
-        if isinstance(ref, dict) and ref.get("ref_id")
-    ][:50]
+    refs_snapshot = _build_refs_snapshot(state=tool_state, references=references)
 
     system = (
         "Write one thesis subsection with citations. "
@@ -137,6 +140,8 @@ def write_section(
         "Do NOT include content that belongs to other subtasks. "
         "If a related topic is outside this subtask's scope, mention it briefly "
         "and note that it will be covered in a later section. "
+        "References marked source=local are author-provided core papers and should be prioritized when relevant. "
+        "For references marked indexed=true, use get_paper_section when you need section-level evidence. "
         "Include specific technical details, mathematical notation where appropriate, "
         "and reference concrete experimental results. "
         "Return JSON with keys: text, citations_used (list of ref_id strings), key_claims (list), "

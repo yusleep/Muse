@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：1/5 phases, 12/28 steps
+- **总进度**：1/5 phases, 13/28 steps
 - **当前 Wave**：Wave 2
-- **下一步**：Phase 2 Step 2.5
+- **下一步**：Phase 3 Step 3.1
 
 ---
 
@@ -25,12 +25,12 @@
 
 ## Wave 2 — Reliability
 
-### Phase 2: Reliability Hardening (4/5)
+### Phase 2: Reliability Hardening (5/5)
 - [x] Step 2.1: ReAct 递归上限 — 累积器 + 补写缺失 subtask (~60 行)
 - [x] Step 2.2: Revision stall 检测 — 文本相似度 + 分数趋势 (~12 行)
 - [x] Step 2.3: Self-assessment 利用 — confidence 驱动优先修订 (~20 行)
 - [x] Step 2.4: Web search / image search stub 替换 (~15 行)
-- [ ] Step 2.5: PaperIndexService — LlamaIndex 全文索引 + 段落级语义检索 (~250 行)
+- [x] Step 2.5: PaperIndexService — LlamaIndex 全文索引 + 段落级语义检索 (~250 行)
 
 ---
 
@@ -76,3 +76,4 @@
 - 2026-03-14: 完成 Phase 2 Step 2.2，为 should_iterate 增加文本/分数 stall 检测
 - 2026-03-14: 完成 Phase 2 Step 2.3，接通 self-assessment 到 review notes 和 MuseState
 - 2026-03-14: 完成 Phase 2 Step 2.4，为 web_search 接入可选 provider，同时保留 stub 兼容行为
+- 2026-03-14: 完成 Phase 2 Step 2.5，接入 PaperIndexService、本地/在线全文索引与 section-level 检索

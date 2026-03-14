@@ -288,19 +288,12 @@ def _write_single_subtask(
     subtask: dict[str, Any],
     existing_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    from muse.graph.helpers.draft_support import _build_refs_snapshot
+
     references = state.get("references", [])
     if not isinstance(references, list):
         references = []
-    refs_snapshot = [
-        {
-            "ref_id": ref.get("ref_id", ""),
-            "title": ref.get("title", ""),
-            "year": ref.get("year"),
-            "abstract": ref.get("abstract") or "",
-        }
-        for ref in references
-        if isinstance(ref, dict) and ref.get("ref_id")
-    ][:50]
+    refs_snapshot = _build_refs_snapshot(state=state, references=references)
     allowed_ref_ids = {
         str(ref.get("ref_id", "")).strip()
         for ref in refs_snapshot
@@ -319,6 +312,8 @@ def _write_single_subtask(
         "SCOPE GUARD: Write ONLY about the topic defined in subtask.title. "
         "Do NOT include content that belongs to other subtasks. "
         "Previous sections have already been drafted; continue by writing only the missing subtask. "
+        "References marked source=local are author-provided core papers and should be prioritized when relevant. "
+        "For references marked indexed=true, use get_paper_section when you need section-level evidence. "
         "Return JSON with keys: text, citations_used (list of ref_id strings), key_claims (list), "
         "transition_out, glossary_additions (object), "
         "self_assessment (object with confidence, weak_spots, needs_revision)."
@@ -388,6 +383,7 @@ def _build_react_chapter_agent(*, services: Any, settings: Any = None):
     from muse.tools.orchestration import submit_result, update_plan
     from muse.tools.research import (
         academic_search,
+        get_paper_section,
         image_search,
         read_pdf,
         retrieve_local_refs,
@@ -416,6 +412,8 @@ def _build_react_chapter_agent(*, services: Any, settings: Any = None):
         submit_result,
         update_plan,
     ]
+    if getattr(services, "paper_index", None) is not None:
+        tools.append(get_paper_section)
 
     model = _create_react_model(settings=settings, services=services)
     if model is None:

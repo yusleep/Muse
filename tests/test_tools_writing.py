@@ -188,14 +188,17 @@ class WriteSectionToolTests(unittest.TestCase):
 
     def test_write_section_prompt_includes_scope_guard(self):
         from muse.tools._context import set_services
+        from muse.tools._context import set_state
         from muse.tools.writing import write_section
 
         seen_systems = []
+        seen_payloads = []
 
         class _CaptureLLM:
             def structured(self, *, system, user, route="default", max_tokens=2500):
-                del user, route, max_tokens
+                del route, max_tokens
                 seen_systems.append(system)
+                seen_payloads.append(json.loads(user))
                 return {
                     "text": "Generated section text about the topic.",
                     "citations_used": ["@smith2024"],
@@ -205,6 +208,17 @@ class WriteSectionToolTests(unittest.TestCase):
         class _Services:
             llm = _CaptureLLM()
 
+        set_state(
+            {
+                "indexed_papers": {
+                    "@smith2024": {
+                        "source": "local",
+                        "indexed": True,
+                        "available_sections": ["Results"],
+                    }
+                }
+            }
+        )
         set_services(_Services())
         write_section.func(
             chapter_title="Introduction",
@@ -219,6 +233,11 @@ class WriteSectionToolTests(unittest.TestCase):
 
         self.assertEqual(len(seen_systems), 1)
         self.assertIn("SCOPE GUARD", seen_systems[0])
+        self.assertIn("source=local", seen_systems[0])
+        snapshot = seen_payloads[0]["available_references"][0]
+        self.assertEqual(snapshot["source"], "local")
+        self.assertTrue(snapshot["indexed"])
+        self.assertEqual(snapshot["available_sections"], ["Results"])
 
     def test_write_section_keeps_full_abstract_and_caps_snapshot_at_50(self):
         from muse.tools._context import set_services

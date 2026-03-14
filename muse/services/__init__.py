@@ -5,6 +5,7 @@ from .citation import verify_all_citations
 from .citation_meta import CitationMetadataClient
 from .http import HttpClient, ProviderError
 from .latex import export_latex_project
+from .paper_index import PaperIndexService
 from .planning import plan_subtasks
 from .providers import LLMClient
 from .search import AcademicSearchClient
@@ -16,6 +17,7 @@ __all__ = [
     "HttpClient",
     "JsonlAuditSink",
     "LLMClient",
+    "PaperIndexService",
     "ProviderError",
     "RunStore",
     "build_event",

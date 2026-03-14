@@ -303,6 +303,56 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
         self.assertEqual(len(snapshot), 50)
         self.assertEqual(snapshot[0]["abstract"], long_abstract)
 
+    def test_write_subtasks_enriches_refs_snapshot_with_index_metadata(self):
+        refs = [
+            {
+                "ref_id": "@r1",
+                "title": "Paper",
+                "year": 2023,
+                "abstract": "Important abstract content for verification",
+            }
+        ]
+
+        received_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                received_payloads.append(json.loads(user))
+                return {
+                    "text": "Subsection text.",
+                    "citations_used": ["@r1"],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=refs,
+            indexed_papers={
+                "@r1": {
+                    "source": "local",
+                    "indexed": True,
+                    "available_sections": ["Method", "Results"],
+                }
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "ch01_s01", "title": "Intro", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        snapshot = received_payloads[0]["available_references"][0]
+        self.assertEqual(snapshot["source"], "local")
+        self.assertTrue(snapshot["indexed"])
+        self.assertEqual(snapshot["available_sections"], ["Method", "Results"])
+
 
 class TestWriteSubtasksWordCountRetry(unittest.TestCase):
     def test_short_draft_triggers_one_expansion_retry(self):

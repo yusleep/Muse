@@ -221,6 +221,17 @@ class RuntimeFlowTests(unittest.TestCase):
             self.assertIn("__interrupt__", result)
             self.assertEqual(result["__interrupt__"][0].value["stage"], "research")
 
+    def test_runtime_creates_paper_index_when_full_text_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._make_settings(tmp)
+            object.__setattr__(settings, "fetch_full_text", True)
+            object.__setattr__(settings, "llamaparse_api_key", "llama-key")
+
+            with patch("muse.runtime.PaperIndexService") as paper_index_cls:
+                runtime = Runtime(settings)
+
+            self.assertIs(runtime.paper_index, paper_index_cls.return_value)
+
     def test_graph_auto_approve_runs_to_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch(

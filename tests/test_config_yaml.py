@@ -107,6 +107,11 @@ class TestYamlToSettings(unittest.TestCase):
                 "semantic_scholar_api_key": "ss-key",
                 "openalex_email": "a@b.com",
                 "crossref_mailto": "c@d.com",
+                "fetch_full_text": True,
+                "llamaparse_api_key": "llama-key",
+                "max_papers_to_index": 8,
+                "local_papers_dir": "papers",
+                "local_priority": False,
             },
             "middleware": {
                 "retry_max": 3,
@@ -120,6 +125,11 @@ class TestYamlToSettings(unittest.TestCase):
         self.assertIn("model_router_config", kw)
         self.assertEqual(kw["semantic_scholar_api_key"], "ss-key")
         self.assertEqual(kw["openalex_email"], "a@b.com")
+        self.assertTrue(kw["fetch_full_text"])
+        self.assertEqual(kw["llamaparse_api_key"], "llama-key")
+        self.assertEqual(kw["max_papers_to_index"], 8)
+        self.assertEqual(kw["local_papers_dir"], os.path.join(config_dir, "papers"))
+        self.assertFalse(kw["local_priority"])
         self.assertEqual(kw["middleware_retry_max"], 3)
         self.assertEqual(kw["middleware_retry_delay"], 10.0)
         self.assertEqual(kw["middleware_context_window"], 64000)
