@@ -551,8 +551,78 @@ class TestWriteSubtasksConsistencyContext(unittest.TestCase):
             previous=[],
         )
 
-        self.assertEqual(seen_payloads[0]["reference_briefs"][0]["ref_id"], "@smith2024")
-        self.assertEqual(seen_payloads[0]["evidence_gaps"], ["No source covers deployment constraints."])
+        self.assertEqual(seen_payloads[-1]["reference_briefs"][0]["ref_id"], "@smith2024")
+        self.assertEqual(seen_payloads[-1]["evidence_gaps"], ["No source covers deployment constraints."])
+
+    def test_write_subtasks_injects_argument_plan_from_reference_briefs(self):
+        calls = []
+
+        class _PlanningLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, max_tokens
+                calls.append({"route": route, "user": json.loads(user)})
+                if route == "default":
+                    return {
+                        "core_claim": "Contrastive learning improves multimodal alignment.",
+                        "evidence_chain": [
+                            {
+                                "claim": "Contrastive learning reduces alignment gap.",
+                                "source": "@smith2024",
+                                "specific_finding": "Table 2 shows a 15% improvement.",
+                            },
+                            {
+                                "claim": "Hallucinated evidence should be filtered.",
+                                "source": "@fake2024",
+                                "specific_finding": "Unsupported.",
+                            },
+                        ],
+                        "logical_flow": "problem -> method -> evidence",
+                        "paragraph_count": 3,
+                    }
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reference_briefs={
+                "ch_02": [
+                    {
+                        "ref_id": "@smith2024",
+                        "relevance": "directly addresses method",
+                        "key_finding": "Table 2 shows a 15% improvement.",
+                        "how_to_cite": "Use as main evidence.",
+                    }
+                ],
+            },
+        )
+
+        write_subtasks(
+            llm_client=_PlanningLLM(),
+            state=state,
+            chapter_id="ch_02",
+            chapter_title="Chapter 2",
+            subtask_plan=[
+                {
+                    "subtask_id": "sub_01",
+                    "title": "Argument Planning",
+                    "description": "Explain why the method works.",
+                    "target_words": 500,
+                }
+            ],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual([call["route"] for call in calls], ["default", "writing"])
+        evidence_chain = calls[1]["user"]["argument_plan"]["evidence_chain"]
+        self.assertEqual(len(evidence_chain), 1)
+        self.assertEqual(evidence_chain[0]["source"], "@smith2024")
 
     def test_retry_result_must_be_longer_to_replace_original(self):
         calls = []

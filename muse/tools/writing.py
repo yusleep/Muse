@@ -10,6 +10,7 @@ from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
 from muse.graph.helpers.draft_support import (
+    _argument_plan_from_briefs,
     _build_refs_snapshot,
     _chapter_reference_context_from_state,
     _consistency_context_from_state,
@@ -145,6 +146,8 @@ def write_section(
         "Do NOT include content that belongs to other subtasks. "
         "If a related topic is outside this subtask's scope, mention it briefly "
         "and note that it will be covered in a later section. "
+        "If an argument_plan is provided, follow its logical_flow and make each paragraph execute one step "
+        "of the evidence_chain. "
         "References marked source=local are author-provided core papers and should be prioritized when relevant. "
         "For references marked indexed=true, use get_paper_section when you need section-level evidence. "
         "Include specific technical details, mathematical notation where appropriate, "
@@ -183,6 +186,14 @@ def write_section(
         user_payload["reference_briefs"] = chapter_briefs
     if evidence_gaps:
         user_payload["evidence_gaps"] = evidence_gaps
+    argument_plan = _argument_plan_from_briefs(
+        llm,
+        subtask={"title": subtask_title, "description": ""},
+        chapter_briefs=chapter_briefs,
+        language=language,
+    )
+    if argument_plan is not None:
+        user_payload["argument_plan"] = argument_plan
     user = json.dumps(user_payload, ensure_ascii=False)
 
     llm_call_failed = False

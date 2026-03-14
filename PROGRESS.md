@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：3/5 phases, 22/28 steps
+- **总进度**：4/5 phases, 23/28 steps
 - **当前 Wave**：Wave 4
-- **下一步**：Phase 4 Step 4.5
+- **下一步**：Phase 5 Step 5.1
 
 ---
 
@@ -47,12 +47,12 @@
 
 ## Wave 4 — Cross-Chapter Intelligence
 
-### Phase 4: Cross-Chapter Intelligence (4/5)
+### Phase 4: Cross-Chapter Intelligence (5/5)
 - [x] Step 4.1: Citation 硬门禁 (~80 行)
 - [x] Step 4.2: Memory Keeper — 跨章术语/引用一致性追踪 (~120 行)
 - [x] Step 4.3: Persistent Reflection Bank — 修订经验积累 (~130 行)
 - [x] Step 4.4: Reference Briefs — 章节级参考文献分析 (~150 行)
-- [ ] Step 4.5: Argument Planning — 预写结构化论证规划 (~100 行)
+- [x] Step 4.5: Argument Planning — 预写结构化论证规划 (~100 行)
 
 ---
 
@@ -86,3 +86,4 @@
 - 2026-03-14: 完成 Phase 4 Step 4.2，将主图改为顺序章节执行，新增 ConsistencyStore 跨章术语/引用记忆，并把 consistency_context 注入写作路径
 - 2026-03-14: 完成 Phase 4 Step 4.3，新增 ReflectionBank，从 review_history 提炼正负修订经验，并把经验 tips 注入写作路径
 - 2026-03-14: 完成 Phase 4 Step 4.4，新增 ref_analysis 节点与 reference_briefs 状态，并把章节级文献摘要/证据缺口注入写作路径
+- 2026-03-14: 完成 Phase 4 Step 4.5，在 legacy/ReAct 写作路径中新增 argument_plan 预规划，并过滤 evidence_chain 中不在 reference_briefs 的 source
