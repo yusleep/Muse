@@ -78,6 +78,89 @@ class ReviewNodeTests(unittest.TestCase):
         self.assertEqual(result["review_notes"], [])
         self.assertEqual(result["revision_instructions"], {})
 
+    def test_global_review_node_uses_base_prompt_for_first_iteration(self):
+        from muse.graph.nodes.review import build_global_review_node
+
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {
+                    "scores": {"logic": 4},
+                    "review_notes": [
+                        {
+                            "section": "Introduction",
+                            "severity": 2,
+                            "instruction": "Tighten the transition into the problem statement.",
+                            "lens": "logic",
+                            "is_recurring": False,
+                        }
+                    ],
+                }
+
+        class _GlobalServices:
+            llm = _CaptureLLM()
+
+        node = build_global_review_node(_GlobalServices())
+        result = node({"final_text": "Merged thesis draft."})
+
+        self.assertEqual(len(seen_systems), 4)
+        self.assertTrue(all("full merged thesis draft" in system for system in seen_systems))
+        self.assertTrue(all("Previous review round" not in system for system in seen_systems))
+        self.assertEqual(result["review_iteration"], 2)
+        self.assertEqual(result["review_history"][0]["iteration"], 1)
+        self.assertIn("problem statement", result["review_history"][0]["notes_summary"])
+        self.assertFalse(result["review_notes"][0]["is_recurring"])
+
+    def test_global_review_node_uses_adaptive_prompt_after_first_iteration(self):
+        from muse.graph.nodes.review import build_global_review_node
+
+        seen_systems = []
+
+        class _AdaptiveLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {
+                    "scores": {"logic": 3},
+                    "review_notes": [
+                        {
+                            "section": "Methods",
+                            "severity": 4,
+                            "instruction": "The evidence gap from the prior draft is still unresolved.",
+                            "lens": "logic",
+                            "is_recurring": True,
+                        }
+                    ],
+                }
+
+        class _GlobalServices:
+            llm = _AdaptiveLLM()
+
+        node = build_global_review_node(_GlobalServices())
+        result = node(
+            {
+                "final_text": "Merged thesis draft, revised.",
+                "review_iteration": 2,
+                "review_history": [
+                    {
+                        "iteration": 1,
+                        "scores": {"logic": 2},
+                        "notes_summary": "The evidence gap from the prior draft is still unresolved.",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(seen_systems), 4)
+        self.assertTrue(all("Previous review round (iteration 1)" in system for system in seen_systems))
+        self.assertTrue(all('"logic": 2' in system for system in seen_systems))
+        self.assertEqual(result["review_iteration"], 3)
+        self.assertTrue(result["review_notes"][0]["is_recurring"])
+        self.assertEqual(result["review_history"][0]["iteration"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

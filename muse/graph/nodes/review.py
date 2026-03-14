@@ -7,7 +7,9 @@ from typing import Any
 from langgraph.types import interrupt
 
 from muse.graph.helpers.review_state import build_revision_instructions
+from muse.prompts.adaptive_review import adaptive_review_prompt
 from muse.prompts.chapter_review import chapter_review_prompt_for_lens
+from muse.prompts.global_review import global_review_prompt_for_lens
 
 
 _REVIEW_LENSES = ["logic", "style", "citation", "structure"]
@@ -137,6 +139,43 @@ def _build_self_assessment_notes(state: dict[str, Any]) -> list[dict[str, Any]]:
     return notes
 
 
+def _merge_review_packets(packets: list[dict[str, Any]]) -> tuple[dict[str, int], list[dict[str, Any]]]:
+    scores: dict[str, int] = {}
+    review_notes: list[dict[str, Any]] = []
+
+    for packet in packets:
+        packet_scores = packet.get("scores", {})
+        if isinstance(packet_scores, dict):
+            for key, value in packet_scores.items():
+                if isinstance(value, (int, float)):
+                    numeric_value = int(value)
+                    scores[key] = min(scores.get(key, numeric_value), numeric_value)
+
+        packet_notes = packet.get("review_notes", [])
+        if isinstance(packet_notes, list):
+            review_notes.extend(note for note in packet_notes if isinstance(note, dict))
+
+    return scores, review_notes
+
+
+def _normalize_global_review_notes(review_notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for note in review_notes:
+        item = dict(note)
+        item["is_recurring"] = bool(item.get("is_recurring", False))
+        normalized.append(item)
+    return normalized
+
+
+def _review_notes_summary(review_notes: list[dict[str, Any]]) -> str:
+    snippets: list[str] = []
+    for note in review_notes[:5]:
+        instruction = str(note.get("instruction", "")).strip()
+        if instruction:
+            snippets.append(instruction[:80])
+    return "; ".join(snippets)
+
+
 def build_chapter_review_node(services: Any):
     def chapter_review(state: dict[str, Any]) -> dict[str, Any]:
         llm = getattr(services, "llm", None)
@@ -176,6 +215,60 @@ def build_chapter_review_node(services: Any):
         }
 
     return chapter_review
+
+
+def build_global_review_node(services: Any):
+    def global_review(state: dict[str, Any]) -> dict[str, Any]:
+        llm = getattr(services, "llm", None)
+        merged_text = str(state.get("final_text", "") or "")
+        review_history = state.get("review_history", [])
+        if not isinstance(review_history, list):
+            review_history = []
+
+        iteration_value = state.get("review_iteration", 1)
+        try:
+            iteration = max(int(iteration_value), 1)
+        except (TypeError, ValueError):
+            iteration = 1
+
+        packets: list[dict[str, Any]] = []
+        if llm is not None:
+            for lens in _REVIEW_LENSES:
+                if iteration > 1 and review_history:
+                    system, user = adaptive_review_prompt(
+                        merged_text=merged_text,
+                        lens=lens,
+                        review_history=review_history,
+                        iteration=iteration,
+                    )
+                else:
+                    system, user = global_review_prompt_for_lens(
+                        merged_text=merged_text,
+                        lens=lens,
+                    )
+                try:
+                    payload = llm.structured(system=system, user=user, route="review", max_tokens=1800)
+                except Exception:
+                    payload = {}
+                if isinstance(payload, dict):
+                    packets.append(payload)
+
+        scores, review_notes = _merge_review_packets(packets)
+        review_notes = _normalize_global_review_notes(review_notes)
+        current_review_record = {
+            "iteration": iteration,
+            "scores": dict(scores),
+            "notes_summary": _review_notes_summary(review_notes),
+            "note_count": len(review_notes),
+        }
+        return {
+            "quality_scores": scores,
+            "review_notes": review_notes,
+            "review_history": [current_review_record],
+            "review_iteration": iteration + 1,
+        }
+
+    return global_review
 
 
 def build_interrupt_node(stage: str, *, auto_approve: bool):

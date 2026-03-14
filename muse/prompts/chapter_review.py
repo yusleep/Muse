@@ -55,6 +55,22 @@ _LENS_BOUNDARIES = {
 }
 
 
+def review_lenses() -> tuple[str, ...]:
+    return _LENS_ORDER
+
+
+def review_rubric_for_lens(lens: str) -> str:
+    if lens not in _LENS_RUBRICS:
+        raise ValueError(f"Unsupported review lens: {lens}")
+    return _LENS_RUBRICS[lens]
+
+
+def review_boundary_for_lens(lens: str) -> str:
+    if lens not in _LENS_BOUNDARIES:
+        raise ValueError(f"Unsupported review lens: {lens}")
+    return _LENS_BOUNDARIES[lens]
+
+
 def _base_system_prompt() -> str:
     return (
         "You are a strict thesis reviewer. "
@@ -71,16 +87,13 @@ def chapter_review_prompt_for_lens(
     merged_text: str,
     lens: str,
 ) -> tuple[str, str]:
-    if lens not in _LENS_RUBRICS:
-        raise ValueError(f"Unsupported review lens: {lens}")
-
     system = "\n\n".join(
         [
             _base_system_prompt(),
             f"Primary review lens: {lens}",
-            _LENS_RUBRICS[lens],
+            review_rubric_for_lens(lens),
             f"When you emit review_notes, set lens to '{lens}'.",
-            _LENS_BOUNDARIES[lens],
+            review_boundary_for_lens(lens),
         ]
     )
     user = json.dumps({"chapter_title": chapter_title, "text": merged_text}, ensure_ascii=False)
@@ -94,7 +107,7 @@ def chapter_review_prompt(chapter_title: str, merged_text: str) -> tuple[str, st
             f"Available review lenses: {', '.join(_LENS_ORDER)}.",
             "If no specific lens is requested, evaluate the chapter from all listed lenses.",
             *(
-                f"Lens {lens}:\n{_LENS_RUBRICS[lens]}\n{_LENS_BOUNDARIES[lens]}"
+                f"Lens {lens}:\n{review_rubric_for_lens(lens)}\n{review_boundary_for_lens(lens)}"
                 for lens in _LENS_ORDER
             ),
         ]

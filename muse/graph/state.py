@@ -35,6 +35,8 @@ class MuseState(TypedDict, total=False):
     chapters: Annotated[dict[str, Any], _merge_dict]
     quality_scores: dict[str, Any]
     review_notes: Annotated[list[dict[str, Any]], operator.add]
+    review_history: Annotated[list[dict[str, Any]], operator.add]
+    review_iteration: int
     revision_instructions: Annotated[dict[str, str], _merge_dict]
     citation_uses: Annotated[list[dict[str, Any]], operator.add]
     citation_ledger: Annotated[dict[str, Any], _merge_dict]

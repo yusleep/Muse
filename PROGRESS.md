@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：1/5 phases, 13/28 steps
-- **当前 Wave**：Wave 2
-- **下一步**：Phase 3 Step 3.1
+- **总进度**：2/5 phases, 14/28 steps
+- **当前 Wave**：Wave 3
+- **下一步**：Phase 3 Step 3.2
 
 ---
 
@@ -36,8 +36,8 @@
 
 ## Wave 3 — Review Architecture
 
-### Phase 3: Global Review (Post-Merge) (0/5)
-- [ ] Step 3.1: 生成-评审闭环 — Reviewer 从修订效果中学习 (~80 行)
+### Phase 3: Global Review (Post-Merge) (1/5)
+- [x] Step 3.1: 生成-评审闭环 — Reviewer 从修订效果中学习 (~80 行)
 - [ ] Step 3.2: 多视角 Critique + Judge — 3 Persona 独立评审 (~200 行)
 - [ ] Step 3.3: 分层深度修订 — Structural → Content → Line (~250 行)
 - [ ] Step 3.4: 智能模型路由优化 (~25 行)
@@ -77,3 +77,4 @@
 - 2026-03-14: 完成 Phase 2 Step 2.3，接通 self-assessment 到 review notes 和 MuseState
 - 2026-03-14: 完成 Phase 2 Step 2.4，为 web_search 接入可选 provider，同时保留 stub 兼容行为
 - 2026-03-14: 完成 Phase 2 Step 2.5，接入 PaperIndexService、本地/在线全文索引与 section-level 检索
+- 2026-03-14: 完成 Phase 3 Step 3.1，新增 global review/adaptive review prompt 与 review_history 状态
