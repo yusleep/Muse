@@ -473,6 +473,63 @@ class ChapterSubgraphTests(unittest.TestCase):
         )
         self.assertIn("Methods generated content.", chapter["merged_text"])
 
+    def test_chapter_subgraph_uses_direct_draft_path_when_settings_present(self):
+        from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
+
+        class _DraftOnlyLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del user, route, max_tokens
+                if "Write one thesis subsection" in system:
+                    return {
+                        "text": "Fallback drafted subsection.",
+                        "citations_used": [],
+                        "key_claims": ["Fallback claim."],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {
+                            "confidence": 0.8,
+                            "weak_spots": [],
+                            "needs_revision": False,
+                        },
+                    }
+                return {}
+
+        services = SimpleNamespace(
+            llm=_DraftOnlyLLM(),
+            rag_index=None,
+            search=object(),
+            subagent_executor=None,
+        )
+
+        node_fn = build_chapter_subgraph_node(services=services, settings=object())
+        result = node_fn(
+            {
+                "chapter_plan": {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "Introduction",
+                    "subtask_plan": [
+                        {"subtask_id": "sub_01", "title": "Background", "target_words": 500},
+                    ],
+                },
+                "references": [],
+                "topic": "Test",
+                "language": "zh",
+                "subtask_results": [],
+                "merged_text": "",
+                "quality_scores": {},
+                "review_notes": [],
+                "revision_instructions": {},
+                "iteration": 0,
+                "max_iterations": 1,
+                "citation_uses": [],
+                "claim_text_by_id": {},
+            }
+        )
+
+        chapter = result["chapters"]["ch_01"]
+        self.assertEqual(chapter["subtask_results"][0]["subtask_id"], "sub_01")
+        self.assertIn("Fallback drafted subsection.", chapter["merged_text"])
+
 
 if __name__ == "__main__":
     unittest.main()

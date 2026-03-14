@@ -96,6 +96,14 @@ def _subtask_plan(chapter_plan: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in plan if isinstance(item, dict)]
 
 
+def _chapter_route(state: dict[str, Any]) -> str:
+    """Backward-compatible review route shim for legacy tests/helpers."""
+
+    from muse.graph.helpers.review_state import should_iterate
+
+    return should_iterate(state)
+
+
 def _ordered_subtask_results(
     subtask_results: list[dict[str, Any]],
     chapter_plan: dict[str, Any],
@@ -446,6 +454,7 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
 
     def run_react_chapter(state: dict[str, Any]) -> dict[str, Any]:
         from muse.tools._context import clear_state, get_state, set_services, set_state
+        from muse.graph.nodes.draft import build_chapter_draft_node
         from muse.tools.orchestration import (
             clear_partial_subtask_results,
             clear_submitted_result,
@@ -466,6 +475,13 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
                 chapter_id,
                 len(subtasks),
             )
+            if settings is not None and getattr(services, "llm", None) is not None:
+                _log.warning(
+                    "chapter react fallback chapter_id=%s strategy=direct_draft",
+                    chapter_id,
+                )
+                direct_result = build_chapter_draft_node(services)(state)
+                return _extract_chapter_result(direct_result, chapter_plan)
             raise ChapterAgentExecutionError(
                 "Chapter ReAct agent unavailable for non-empty chapter workload."
             )
