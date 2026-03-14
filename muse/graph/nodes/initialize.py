@@ -44,6 +44,15 @@ def build_initialize_node(settings: Any, services: Any):
             "local_refs_count": len(local_refs),
         }
         paper_index = getattr(services, "paper_index", None)
+        persisted_indexed = {}
+        if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+            try:
+                persisted_indexed = paper_index.indexed_papers()
+            except Exception:  # noqa: BLE001
+                persisted_indexed = {}
+        if persisted_indexed:
+            result["indexed_papers"] = persisted_indexed
+            result["paper_index_ready"] = True
         local_papers_dir = str(getattr(settings, "local_papers_dir", "") or "").strip()
         if paper_index is not None and local_papers_dir:
             try:
@@ -51,7 +60,9 @@ def build_initialize_node(settings: Any, services: Any):
             except Exception:  # noqa: BLE001
                 indexed_papers = {}
             if indexed_papers:
-                result["indexed_papers"] = indexed_papers
+                merged_indexed = dict(persisted_indexed)
+                merged_indexed.update(indexed_papers)
+                result["indexed_papers"] = merged_indexed
                 result["paper_index_ready"] = True
         return result
 

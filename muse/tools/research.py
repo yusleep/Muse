@@ -167,9 +167,16 @@ def retrieve_local_refs(
     tool_state = _state_from_runtime(runtime)
     rag_index = getattr(services, "rag_index", None)
     paper_index = getattr(services, "paper_index", None)
+    persisted_indexed = {}
+    if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+        try:
+            persisted_indexed = paper_index.indexed_papers()
+        except Exception:  # noqa: BLE001
+            persisted_indexed = {}
+    paper_index_ready = bool(tool_state.get("paper_index_ready", False) or persisted_indexed)
 
     results: list[dict[str, Any]] = []
-    if paper_index is not None and bool(tool_state.get("paper_index_ready", False)):
+    if paper_index is not None and paper_index_ready:
         try:
             raw_results = paper_index.query(query, top_k=top_k)
             if isinstance(raw_results, list):

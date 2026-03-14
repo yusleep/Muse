@@ -90,6 +90,15 @@ def build_search_node(settings: Any, services: Any):
             "rag_enabled": getattr(services, "rag_index", None) is not None,
         }
         paper_index = getattr(services, "paper_index", None)
+        persisted_indexed = {}
+        if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+            try:
+                persisted_indexed = paper_index.indexed_papers()
+            except Exception:  # noqa: BLE001
+                persisted_indexed = {}
+        if persisted_indexed:
+            result["indexed_papers"] = persisted_indexed
+            result["paper_index_ready"] = True
         if paper_index is not None and bool(getattr(settings, "fetch_full_text", False)):
             http_client = getattr(services, "api_http", None) or getattr(services, "http", None)
             max_papers = int(getattr(settings, "max_papers_to_index", 20) or 20)
@@ -103,7 +112,9 @@ def build_search_node(settings: Any, services: Any):
             except Exception:  # noqa: BLE001
                 indexed_papers = {}
             if indexed_papers:
-                result["indexed_papers"] = indexed_papers
+                merged_indexed = dict(persisted_indexed)
+                merged_indexed.update(indexed_papers)
+                result["indexed_papers"] = merged_indexed
                 result["paper_index_ready"] = True
         return result
 

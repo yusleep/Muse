@@ -82,6 +82,26 @@ class GraphEntryNodeTests(unittest.TestCase):
         self.assertTrue(result["paper_index_ready"])
         self.assertIn("@localpdf", result["indexed_papers"])
 
+    def test_initialize_node_restores_persisted_index_metadata(self):
+        class _PaperIndex:
+            def indexed_papers(self):
+                return {
+                    "@persisted": {
+                        "source": "online",
+                        "indexed": True,
+                        "available_sections": ["Results"],
+                    }
+                }
+
+        services = _Services()
+        services.paper_index = _PaperIndex()
+        node = build_initialize_node(self._make_settings("runs"), services)
+
+        result = node({})
+
+        self.assertTrue(result["paper_index_ready"])
+        self.assertIn("@persisted", result["indexed_papers"])
+
     def test_search_node_ingests_online_papers_when_full_text_enabled(self):
         class _PaperIndex:
             def __init__(self):
