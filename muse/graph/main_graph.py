@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 
 from muse.config import Settings
 from muse.graph.nodes import (
+    build_citation_repair_node,
     build_export_node,
     build_initialize_node,
     build_interrupt_node,
@@ -27,6 +28,24 @@ from muse.graph.subgraphs.citation import build_citation_subgraph_node
 from muse.graph.subgraphs.composition import build_composition_subgraph_node
 from muse.graph.subgraphs.review import build_global_review_subgraph_node
 from muse.middlewares import build_default_chain
+
+
+def _citation_quality_route(state: dict[str, Any]) -> str:
+    flagged = state.get("flagged_citations", [])
+    verified = state.get("verified_citations", [])
+    if not isinstance(flagged, list):
+        flagged = []
+    if not isinstance(verified, list):
+        verified = []
+
+    total = len(flagged) + len(verified)
+    if total == 0:
+        return "polish"
+
+    flagged_ratio = len(flagged) / total
+    if flagged_ratio > 0.2 and not bool(state.get("_citation_repair_attempted", False)):
+        return "citation_repair"
+    return "polish"
 
 
 class _NullServices:
@@ -155,6 +174,15 @@ def build_graph(
         ),
     )
     builder.add_node(
+        "citation_repair",
+        _wrap(
+            build_citation_repair_node(),
+            "citation_repair",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "polish",
         _wrap(build_polish_node(services), "polish", settings, services),
     )
@@ -186,7 +214,12 @@ def build_graph(
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "global_review")
         builder.add_edge("global_review", "citation_subgraph")
-    builder.add_edge("citation_subgraph", "polish")
+    builder.add_conditional_edges(
+        "citation_subgraph",
+        _citation_quality_route,
+        {"citation_repair": "citation_repair", "polish": "polish"},
+    )
+    builder.add_edge("citation_repair", "citation_subgraph")
     builder.add_edge("polish", "composition_subgraph")
     builder.add_edge("composition_subgraph", "approve_final")
     builder.add_edge("approve_final", "export")
