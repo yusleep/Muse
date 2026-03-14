@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from typing import Mapping
 
@@ -32,8 +33,6 @@ def should_iterate(
         return "done"
 
     if previous_text_hash is not None and current_text:
-        import hashlib
-
         current_hash = hashlib.md5(current_text.encode()).hexdigest()
         if current_hash == previous_text_hash:
             return "done"
