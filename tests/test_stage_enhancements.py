@@ -533,6 +533,46 @@ class TestWriteSubtasksScopeGuard(unittest.TestCase):
         self.assertIn("SCOPE GUARD", seen_systems[0])
 
 
+class TestDraftRouteSelection(unittest.TestCase):
+    def test_chapter_draft_node_uses_revision_route_after_first_iteration(self):
+        from muse.graph.nodes.draft import build_chapter_draft_node
+
+        seen_routes = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, max_tokens
+                seen_routes.append(route)
+                return {
+                    "text": "word " * 200,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        services = type("_Services", (), {"llm": _CaptureLLM(), "rag_index": None})()
+        node = build_chapter_draft_node(services)
+        node(
+            {
+                "chapter_plan": {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "绪论",
+                    "subtask_plan": [{"subtask_id": "sub_01", "title": "背景", "target_words": 200}],
+                },
+                "references": [],
+                "topic": "LangGraph thesis automation",
+                "language": "zh",
+                "revision_instructions": {"sub_01": "Expand the comparison paragraph."},
+                "subtask_results": [],
+                "iteration": 1,
+            }
+        )
+
+        self.assertEqual(seen_routes, ["writing_revision"])
+
+
 # ---------------------------------------------------------------------------
 # Stage 5 per-chapter polish tests
 # ---------------------------------------------------------------------------

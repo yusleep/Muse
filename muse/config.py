@@ -32,6 +32,7 @@ class Settings:
     max_papers_to_index: int = 20
     local_papers_dir: str = ""
     local_priority: bool = True
+    review_mode: str = "classic"
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +229,10 @@ def _yaml_to_settings(
             resolved = _resolve_config_path(str(paths["refs_dir"]), config_dir)
             kw["refs_dir"] = resolved if os.path.isdir(resolved) else None
 
+    review = yaml_cfg.get("review", {})
+    if isinstance(review, dict) and review.get("mode"):
+        kw["review_mode"] = str(review["mode"]).strip().lower()
+
     return kw
 
 
@@ -366,6 +371,10 @@ def load_settings(
             return raw
         return yaml_kw.get(yaml_key) or None
 
+    review_mode = source.get("MUSE_REVIEW_MODE", "").strip().lower() or str(
+        yaml_kw.get("review_mode", "classic")
+    ).strip().lower() or "classic"
+
     return Settings(
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
@@ -382,6 +391,7 @@ def load_settings(
         middleware_compaction_threshold=middleware_compaction_threshold,
         middleware_compaction_recent_tokens=middleware_compaction_recent_tokens,
         middleware_context_window=middleware_context_window,
+        review_mode=review_mode,
     )
 
 

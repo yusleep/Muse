@@ -40,12 +40,20 @@ providers:
 routes:
   default:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
   writing:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  writing_revision: { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
   outline:   { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
   review:    { primary: anthropic/sonnet, fallbacks: [anthropic/haiku] }
+  review_judge: { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  review_structural: { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
+  review_line: { primary: anthropic/sonnet, fallbacks: [anthropic/haiku] }
   reasoning: { primary: anthropic/opus,   fallbacks: [anthropic/sonnet] }
   polish:    { primary: anthropic/sonnet, fallbacks: [anthropic/haiku] }
 
 aliases: {}
+
+# ---- review architecture ----
+review:
+  mode: classic
 
 # ---- academic search ----
 search:

@@ -44,6 +44,11 @@ _LAYER_CONFIG = {
         "score_keys": ("style", "term_consistency", "redundancy"),
     },
 }
+_LAYER_REVIEW_ROUTES = {
+    "structural": "review_structural",
+    "content": "review",
+    "line": "review_line",
+}
 
 
 def _layer_route(layer: str):
@@ -75,12 +80,42 @@ def _layer_route(layer: str):
 
 def build_global_review_graph(*, services: Any):
     builder = StateGraph(GlobalReviewState)
-    builder.add_node("structural_review", build_layered_review_node(services, layer="structural"))
-    builder.add_node("structural_revise", build_global_revise_node(services, layer="structural"))
-    builder.add_node("content_review", build_layered_review_node(services, layer="content"))
-    builder.add_node("content_revise", build_global_revise_node(services, layer="content"))
-    builder.add_node("line_review", build_layered_review_node(services, layer="line"))
-    builder.add_node("line_revise", build_global_revise_node(services, layer="line"))
+    builder.add_node(
+        "structural_review",
+        build_layered_review_node(
+            services,
+            layer="structural",
+            route=_LAYER_REVIEW_ROUTES["structural"],
+        ),
+    )
+    builder.add_node(
+        "structural_revise",
+        build_global_revise_node(services, layer="structural", route="writing_revision"),
+    )
+    builder.add_node(
+        "content_review",
+        build_layered_review_node(
+            services,
+            layer="content",
+            route=_LAYER_REVIEW_ROUTES["content"],
+        ),
+    )
+    builder.add_node(
+        "content_revise",
+        build_global_revise_node(services, layer="content", route="writing_revision"),
+    )
+    builder.add_node(
+        "line_review",
+        build_layered_review_node(
+            services,
+            layer="line",
+            route=_LAYER_REVIEW_ROUTES["line"],
+        ),
+    )
+    builder.add_node(
+        "line_revise",
+        build_global_revise_node(services, layer="line", route="writing_revision"),
+    )
 
     builder.add_edge(START, "structural_review")
     builder.add_conditional_edges(

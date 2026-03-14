@@ -401,7 +401,7 @@ def _run_persona_global_review(
     )
 
 
-def build_layered_review_node(services: Any, *, layer: str):
+def build_layered_review_node(services: Any, *, layer: str, route: str = "review"):
     allowed_keys = _LAYER_SCORE_KEYS[layer]
     iteration_key = _layer_iteration_key(layer)
 
@@ -421,7 +421,7 @@ def build_layered_review_node(services: Any, *, layer: str):
         final_text = str(state.get("final_text", "") or "")
         system, user = layered_review_prompt(layer, final_text)
         try:
-            payload = llm.structured(system=system, user=user, route="review", max_tokens=1800) if llm is not None else {}
+            payload = llm.structured(system=system, user=user, route=route, max_tokens=1800) if llm is not None else {}
         except Exception:
             payload = {}
         if not isinstance(payload, dict):
@@ -457,7 +457,7 @@ def build_layered_review_node(services: Any, *, layer: str):
     return layered_review
 
 
-def build_global_revise_node(services: Any, *, layer: str):
+def build_global_revise_node(services: Any, *, layer: str, route: str = "writing_revision"):
     def revise(state: dict[str, Any]) -> dict[str, Any]:
         llm = getattr(services, "llm", None)
         final_text = str(state.get("final_text", "") or "")
@@ -469,7 +469,7 @@ def build_global_revise_node(services: Any, *, layer: str):
 
         system, user = layered_revision_prompt(layer, final_text, review_notes)
         try:
-            payload = llm.structured(system=system, user=user, route="writing", max_tokens=2800)
+            payload = llm.structured(system=system, user=user, route=route, max_tokens=2800)
         except Exception:
             payload = {}
         if not isinstance(payload, dict):

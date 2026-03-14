@@ -26,8 +26,8 @@ class LayeredReviewSubgraphTests(unittest.TestCase):
                 self.structural_reviews = 0
 
             def structured(self, *, system, user, route="default", max_tokens=2500):
-                del user, route, max_tokens
-                self.calls.append(system)
+                del user, max_tokens
+                self.calls.append((system, route))
                 if "Revise the full merged thesis draft for the structural layer" in system:
                     return {"final_text": "Revised structural draft."}
                 if "only focus on the structural layer" in system:
@@ -63,10 +63,14 @@ class LayeredReviewSubgraphTests(unittest.TestCase):
         self.assertEqual(result["structural_iterations"], 2)
         self.assertEqual(result["content_iterations"], 1)
         self.assertEqual(result["line_iterations"], 1)
-        self.assertIn("only focus on the structural layer", services.llm.calls[0])
-        self.assertIn("Revise the full merged thesis draft for the structural layer", services.llm.calls[1])
-        self.assertIn("only focus on the structural layer", services.llm.calls[2])
-        self.assertIn("only focus on the content layer", services.llm.calls[3])
+        self.assertIn("only focus on the structural layer", services.llm.calls[0][0])
+        self.assertEqual(services.llm.calls[0][1], "review_structural")
+        self.assertIn("Revise the full merged thesis draft for the structural layer", services.llm.calls[1][0])
+        self.assertEqual(services.llm.calls[1][1], "writing_revision")
+        self.assertIn("only focus on the structural layer", services.llm.calls[2][0])
+        self.assertEqual(services.llm.calls[2][1], "review_structural")
+        self.assertIn("only focus on the content layer", services.llm.calls[3][0])
+        self.assertEqual(services.llm.calls[3][1], "review")
 
     def test_layered_review_graph_can_pass_all_layers_without_revision(self):
         from muse.graph.subgraphs.review import build_global_review_graph
@@ -76,8 +80,8 @@ class LayeredReviewSubgraphTests(unittest.TestCase):
                 self.calls = []
 
             def structured(self, *, system, user, route="default", max_tokens=2500):
-                del user, route, max_tokens
-                self.calls.append(system)
+                del user, max_tokens
+                self.calls.append((system, route))
                 if "only focus on the structural layer" in system:
                     return {"scores": {"logic": 4, "structure": 4, "balance": 4}, "review_notes": []}
                 if "only focus on the content layer" in system:
@@ -99,6 +103,10 @@ class LayeredReviewSubgraphTests(unittest.TestCase):
         self.assertEqual(result["content_iterations"], 1)
         self.assertEqual(result["line_iterations"], 1)
         self.assertEqual(len(services.llm.calls), 3)
+        self.assertEqual(
+            [route for _, route in services.llm.calls],
+            ["review_structural", "review", "review_line"],
+        )
 
 
 if __name__ == "__main__":
