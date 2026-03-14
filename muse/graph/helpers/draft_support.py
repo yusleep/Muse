@@ -141,10 +141,32 @@ def _reflection_tips_from_state(state: dict[str, Any]) -> list[str]:
     return bank.get_writing_tips(max_tips=3)
 
 
+def _chapter_reference_context_from_state(
+    state: dict[str, Any],
+    *,
+    chapter_id: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    briefs = state.get("reference_briefs", {})
+    if not isinstance(briefs, dict):
+        return [], []
+    chapter_key = str(chapter_id).strip()
+    chapter_briefs = briefs.get(chapter_key, [])
+    evidence_gaps = briefs.get(f"{chapter_key}_gaps", [])
+    if not isinstance(chapter_briefs, list):
+        chapter_briefs = []
+    if not isinstance(evidence_gaps, list):
+        evidence_gaps = []
+    return (
+        [dict(item) for item in chapter_briefs if isinstance(item, dict)],
+        [str(item).strip() for item in evidence_gaps if str(item).strip()],
+    )
+
+
 def write_subtasks(
     *,
     llm_client: Any,
     state: dict[str, Any],
+    chapter_id: str = "",
     chapter_title: str,
     subtask_plan: list[dict[str, Any]],
     revision_instructions: dict[str, str],
@@ -208,6 +230,14 @@ def write_subtasks(
         reflection_tips = _reflection_tips_from_state(state)
         if reflection_tips:
             user_payload["writing_tips_from_experience"] = reflection_tips
+        chapter_briefs, evidence_gaps = _chapter_reference_context_from_state(
+            state,
+            chapter_id=chapter_id,
+        )
+        if chapter_briefs:
+            user_payload["reference_briefs"] = chapter_briefs
+        if evidence_gaps:
+            user_payload["evidence_gaps"] = evidence_gaps
         if local_context:
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)

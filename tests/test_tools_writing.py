@@ -426,6 +426,62 @@ class WriteSectionToolTests(unittest.TestCase):
         self.assertIn("Clarify the core argument", tips[0])
         clear_partial_subtask_results()
 
+    def test_write_section_injects_reference_briefs_from_runtime_state(self):
+        from muse.tools._context import set_services
+        from muse.tools._context import set_state
+        from muse.tools.orchestration import clear_partial_subtask_results
+        from muse.tools.writing import write_section
+
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "Generated section text about the topic.",
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        set_state(
+            {
+                "chapter_plan": {"chapter_id": "ch_02"},
+                "reference_briefs": {
+                    "ch_02": [
+                        {
+                            "ref_id": "@smith2024",
+                            "relevance": "directly addresses method",
+                            "key_finding": "Table 2 shows a 15% improvement.",
+                            "how_to_cite": "Use as main evidence.",
+                        }
+                    ],
+                    "ch_02_gaps": ["No source covers deployment constraints."],
+                },
+            }
+        )
+        set_services(_Services())
+        write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        self.assertEqual(seen_payloads[0]["reference_briefs"][0]["ref_id"], "@smith2024")
+        self.assertEqual(seen_payloads[0]["evidence_gaps"], ["No source covers deployment constraints."])
+        clear_partial_subtask_results()
+
     def test_revise_section_returns_revised_text(self):
         from muse.tools.writing import revise_section
 

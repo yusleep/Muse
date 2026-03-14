@@ -19,6 +19,7 @@ from muse.graph.nodes import (
     build_outline_node,
     build_polish_node,
     build_coherence_check_node,
+    build_ref_analysis_node,
     build_search_node,
 )
 from muse.graph.nodes.draft import (
@@ -132,6 +133,15 @@ def build_graph(
     )
     builder.add_node("approve_outline", build_interrupt_node("outline", auto_approve=auto_approve))
     builder.add_node(
+        "ref_analysis",
+        _wrap(
+            build_ref_analysis_node(services=services),
+            "ref_analysis",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "chapter_subgraph",
         _wrap(
             build_chapter_subgraph_node(services=services, settings=settings),
@@ -227,7 +237,8 @@ def build_graph(
     builder.add_edge("search", "review_refs")
     builder.add_edge("review_refs", "outline")
     builder.add_edge("outline", "approve_outline")
-    builder.add_edge("approve_outline", "prepare_next_chapter")
+    builder.add_edge("approve_outline", "ref_analysis")
+    builder.add_edge("ref_analysis", "prepare_next_chapter")
     builder.add_conditional_edges(
         "prepare_next_chapter",
         next_chapter_route,

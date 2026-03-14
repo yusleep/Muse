@@ -11,6 +11,7 @@ from langchain_core.tools import tool
 
 from muse.graph.helpers.draft_support import (
     _build_refs_snapshot,
+    _chapter_reference_context_from_state,
     _consistency_context_from_state,
     _reflection_tips_from_state,
 )
@@ -172,6 +173,16 @@ def write_section(
     reflection_tips = _reflection_tips_from_state(tool_state)
     if reflection_tips:
         user_payload["writing_tips_from_experience"] = reflection_tips
+    chapter_plan = tool_state.get("chapter_plan", {})
+    chapter_id = str(chapter_plan.get("chapter_id", "")).strip() if isinstance(chapter_plan, dict) else ""
+    chapter_briefs, evidence_gaps = _chapter_reference_context_from_state(
+        tool_state,
+        chapter_id=chapter_id,
+    )
+    if chapter_briefs:
+        user_payload["reference_briefs"] = chapter_briefs
+    if evidence_gaps:
+        user_payload["evidence_gaps"] = evidence_gaps
     user = json.dumps(user_payload, ensure_ascii=False)
 
     llm_call_failed = False

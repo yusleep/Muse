@@ -34,6 +34,7 @@ class MuseState(TypedDict, total=False):
     current_chapter_index: int
     consistency_data: Annotated[dict[str, Any], _merge_dict]
     reflection_data: Annotated[dict[str, Any], _merge_dict]
+    reference_briefs: Annotated[dict[str, Any], _merge_dict]
     chapter_plan: dict[str, Any]
     subtask_results: list[dict[str, Any]]
     merged_text: str

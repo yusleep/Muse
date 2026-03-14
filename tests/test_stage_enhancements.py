@@ -510,6 +510,50 @@ class TestWriteSubtasksConsistencyContext(unittest.TestCase):
         self.assertEqual(len(tips), 1)
         self.assertIn("Clarify the core argument", tips[0])
 
+    def test_write_subtasks_injects_reference_briefs_and_gaps(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reference_briefs={
+                "ch_02": [
+                    {
+                        "ref_id": "@smith2024",
+                        "relevance": "directly addresses method",
+                        "key_finding": "Table 2 shows a 15% improvement.",
+                        "how_to_cite": "Use as main evidence.",
+                    }
+                ],
+                "ch_02_gaps": ["No source covers deployment constraints."],
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_id="ch_02",
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Reference Briefs", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(seen_payloads[0]["reference_briefs"][0]["ref_id"], "@smith2024")
+        self.assertEqual(seen_payloads[0]["evidence_gaps"], ["No source covers deployment constraints."])
+
     def test_retry_result_must_be_longer_to_replace_original(self):
         calls = []
 
