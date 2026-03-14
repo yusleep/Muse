@@ -10,11 +10,10 @@ class ResearchToolTests(unittest.TestCase):
     def test_academic_search_returns_json_list(self):
         from muse.tools.research import academic_search
 
-        result_str = academic_search.invoke(
-            {
-                "query": "graph neural networks",
-                "max_results": 3,
-            }
+        result_str = academic_search.func(
+            query="graph neural networks",
+            max_results=3,
+            runtime=None,
         )
         result = json.loads(result_str)
         self.assertIsInstance(result, list)
@@ -22,15 +21,45 @@ class ResearchToolTests(unittest.TestCase):
     def test_retrieve_local_refs_without_index(self):
         from muse.tools.research import retrieve_local_refs
 
-        result_str = retrieve_local_refs.invoke(
-            {
-                "query": "transformer architecture",
-                "top_k": 5,
-            }
+        result_str = retrieve_local_refs.func(
+            query="transformer architecture",
+            top_k=5,
+            runtime=None,
         )
         result = json.loads(result_str)
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 0)
+
+    def test_retrieve_local_refs_falls_back_to_state_references(self):
+        from muse.tools._context import clear_state, set_state
+        from muse.tools.research import retrieve_local_refs
+
+        set_state(
+            {
+                "references": [
+                    {
+                        "ref_id": "@lamport1982",
+                        "title": "The Byzantine Generals Problem",
+                        "authors": ["Leslie Lamport"],
+                        "year": 1982,
+                        "abstract": "Consensus in the presence of Byzantine faults.",
+                        "source": "state",
+                    }
+                ]
+            }
+        )
+        try:
+            result_str = retrieve_local_refs.func(
+                query="Byzantine fault tolerance consensus distributed systems",
+                top_k=5,
+                runtime=None,
+            )
+        finally:
+            clear_state()
+
+        result = json.loads(result_str)
+        self.assertIsInstance(result, list)
+        self.assertEqual(result[0]["ref_id"], "@lamport1982")
 
     def test_web_search_returns_string(self):
         from muse.tools.research import web_search

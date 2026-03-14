@@ -41,11 +41,12 @@ chapter for an academic thesis.
 {references_summary}
 
 ## Workflow (suggested, not mandatory)
-1. Research with `academic_search` or `retrieve_local_refs` when needed.
-2. Write each subsection in order with `write_section`.
-3. Review the merged draft with `self_review`.
-4. If any score is below 4, revise with `revise_section` or `apply_patch`.
-5. Call `submit_result` when the chapter is ready.
+1. Start from the provided references and use `retrieve_local_refs` to search the current reference catalog first.
+2. Use `academic_search` only when the provided references clearly do not cover a subtask.
+3. Write each subsection in order with `write_section`.
+4. Review the merged draft with `self_review`.
+5. If any score is below 4, revise with `revise_section` or `apply_patch`.
+6. Call `submit_result` when the chapter is ready.
 
 ## Submission Contract
 Call `submit_result` with a JSON object containing:
@@ -58,6 +59,8 @@ Call `submit_result` with a JSON object containing:
 
 ## Rules
 - Use ONLY ref_id values from the provided references. Never invent citations.
+- Prefer the provided references over repeated external searches.
+- If a retrieval returns empty, do not repeat the same or equivalent query in a loop. Reformulate once or continue with the provided references.
 - Write in {language} (zh = Chinese, en = English).
 - Each subtask should target its requested length.
 - You MUST call `submit_result` to finish.

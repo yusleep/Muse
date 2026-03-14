@@ -1,4 +1,4 @@
-"""Integration test: full pipeline with ReAct sub-graphs in fallback mode."""
+"""Integration test: full pipeline with ReAct sub-graphs."""
 
 from __future__ import annotations
 
@@ -89,6 +89,29 @@ class _IntegrationServices:
         self.local_refs = []
 
 
+class _FinalizingCitationReactAgent:
+    def invoke(self, agent_input, config, **kwargs):
+        del config, kwargs
+        from muse.tools.citation import finalize_citation_review, record_citation_assessment
+
+        worklist = agent_input.get("citation_worklist", [])
+        for item in worklist:
+            record_citation_assessment.invoke(
+                {
+                    "cite_key": item["cite_key"],
+                    "claim_id": item["claim_id"],
+                    "verdict": "verified",
+                    "support_score": 0.95,
+                    "confidence": "high",
+                    "reason": "supported",
+                    "detail": "Integration citation verified.",
+                    "evidence_excerpt": item.get("evidence", ""),
+                }
+            )
+        finalize_citation_review.invoke({"summary": "integration citation review complete"})
+        return {"messages": []}
+
+
 class FullPipelineIntegrationTest(unittest.TestCase):
     def test_main_graph_compiles(self):
         from muse.graph.main_graph import build_graph
@@ -131,28 +154,32 @@ class FullPipelineIntegrationTest(unittest.TestCase):
         self.assertIn("ch_01", result["chapters"])
         self.assertIn("merged_text", result["chapters"]["ch_01"])
 
-    def test_citation_subgraph_fallback_path(self):
+    def test_citation_subgraph_react_path(self):
         from muse.graph.subgraphs.citation import build_citation_subgraph_node
 
-        node_fn = build_citation_subgraph_node(services=_IntegrationServices())
-        result = node_fn(
-            {
-                "references": [
-                    {
-                        "ref_id": "@a",
-                        "title": "A",
-                        "doi": "10.1/a",
-                        "authors": ["X"],
-                        "year": 2024,
-                    }
-                ],
-                "citation_uses": [{"cite_key": "@a", "claim_id": "c1"}],
-                "claim_text_by_id": {"c1": "Test claim."},
-                "citation_ledger": {},
-                "verified_citations": [],
-                "flagged_citations": [],
-            }
-        )
+        with patch(
+            "muse.graph.subgraphs.citation._build_react_citation_agent",
+            return_value=_FinalizingCitationReactAgent(),
+        ):
+            node_fn = build_citation_subgraph_node(services=_IntegrationServices())
+            result = node_fn(
+                {
+                    "references": [
+                        {
+                            "ref_id": "@a",
+                            "title": "A",
+                            "doi": "10.1/a",
+                            "authors": ["X"],
+                            "year": 2024,
+                        }
+                    ],
+                    "citation_uses": [{"cite_key": "@a", "claim_id": "c1"}],
+                    "claim_text_by_id": {"c1": "Test claim."},
+                    "citation_ledger": {},
+                    "verified_citations": [],
+                    "flagged_citations": [],
+                }
+            )
         self.assertIn("citation_ledger", result)
 
     def test_composition_subgraph_fallback_path(self):

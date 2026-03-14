@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import base64
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from .http import HttpClient, ProviderError
+
+_log = logging.getLogger("muse.providers")
 @dataclass(frozen=True)
 class _ModelAttempt:
     route_name: str
@@ -369,7 +373,7 @@ class LLMClient:
 
             # Check if failures are transient (timeout/network) and we can retry
             failure_text = " | ".join(failures) if failures else "no attempts were available"
-            is_transient = any(kw in failure_text.lower() for kw in ("timed out", "timeout", "network", "connection", "502", "503", "504", "429", "invalid json response"))
+            is_transient = any(kw in failure_text.lower() for kw in ("timed out", "timeout", "network", "connection", "500", "502", "503", "504", "429", "auth_unavailable", "invalid json response"))
             if is_transient and _retry < _transient_retries:
                 _time.sleep(5 * (_retry + 1))
                 continue
@@ -405,6 +409,8 @@ class LLMClient:
             max_tokens=max_tokens,
         )
         content = out["content"]
+        if not content:
+            raise ProviderError("LLM structured response was empty")
         parsed = _parse_json_relaxed(content)
         if not isinstance(parsed, dict):
             raise ProviderError("LLM structured response was not a JSON object")
@@ -508,16 +514,51 @@ class AcademicSearchClient:
             ]
 
         papers: list[dict[str, Any]] = []
+        disabled_sources: set[str] = set()
         for q in queries:
-            for fetch, kwargs in [
-                (self.search_semantic_scholar, {"query": q, "limit": 10}),
-                (self.search_openalex, {"query": q, "limit": 10}),
-                (self.search_arxiv, {"query": q, "limit": 8}),
+            for source_name, fetch, kwargs in [
+                ("semantic_scholar", self.search_semantic_scholar, {"query": q, "limit": 10}),
+                ("openalex", self.search_openalex, {"query": q, "limit": 10}),
+                ("arxiv", self.search_arxiv, {"query": q, "limit": 8}),
             ]:
+                if source_name in disabled_sources:
+                    _log.info(
+                        "academic search skip source=%s query=%r reason=rate_limited",
+                        source_name,
+                        q,
+                    )
+                    continue
+
+                started_at = time.monotonic()
                 try:
-                    papers.extend(fetch(**kwargs))
-                except Exception:  # noqa: BLE001
-                    pass
+                    records = fetch(**kwargs)
+                    papers.extend(records)
+                    _log.info(
+                        "academic search source=%s query=%r status=ok results=%d elapsed_ms=%d",
+                        source_name,
+                        q,
+                        len(records) if isinstance(records, list) else 0,
+                        int((time.monotonic() - started_at) * 1000),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    elapsed_ms = int((time.monotonic() - started_at) * 1000)
+                    if _is_rate_limited_search_error(exc):
+                        disabled_sources.add(source_name)
+                        _log.warning(
+                            "academic search source=%s query=%r status=rate_limited elapsed_ms=%d error=%s",
+                            source_name,
+                            q,
+                            elapsed_ms,
+                            exc,
+                        )
+                    else:
+                        _log.warning(
+                            "academic search source=%s query=%r status=error elapsed_ms=%d error=%s",
+                            source_name,
+                            q,
+                            elapsed_ms,
+                            exc,
+                        )
 
         deduped = _dedupe_references(papers)
         return deduped[:80], queries
@@ -564,15 +605,18 @@ class AcademicSearchClient:
 
         records: list[dict[str, Any]] = []
         for item in payload.get("results", []):
-            authorships = item.get("authorships", [])
+            authorships = item.get("authorships") or []
             authors = [
-                auth.get("author", {}).get("display_name", "")
+                (auth.get("author") or {}).get("display_name", "")
                 for auth in authorships
-                if auth.get("author", {}).get("display_name")
+                if isinstance(auth, dict) and (auth.get("author") or {}).get("display_name")
             ]
             doi = item.get("doi")
             if isinstance(doi, str):
                 doi = doi.replace("https://doi.org/", "")
+
+            primary_location = item.get("primary_location") or {}
+            source = primary_location.get("source") or {}
 
             records.append(
                 {
@@ -581,7 +625,7 @@ class AcademicSearchClient:
                     "authors": authors,
                     "year": item.get("publication_year"),
                     "doi": doi,
-                    "venue": item.get("primary_location", {}).get("source", {}).get("display_name"),
+                    "venue": source.get("display_name"),
                     "abstract": _openalex_abstract(item.get("abstract_inverted_index")),
                     "source": "openalex",
                     "verified_metadata": bool(item.get("title")),
@@ -623,6 +667,11 @@ class AcademicSearchClient:
                 }
             )
         return records
+
+
+def _is_rate_limited_search_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "429" in text or "rate limit" in text or "too many requests" in text
 
 
 @dataclass
@@ -940,6 +989,8 @@ def _extract_llm_message(result: Mapping[str, Any]) -> str:
                     or isinstance(msg.get("function_call"), dict)
                 ):
                     return ""
+                if content is None:
+                    return ""
 
     direct = result.get("output_text")
     if isinstance(direct, str) and direct.strip():
@@ -986,14 +1037,17 @@ def _extract_text_from_responses_output(output: Any) -> str:
 
 def _reference_id(authors: Any, year: Any, title: Any) -> str:
     year_str = str(year) if year else "noyear"
-    if isinstance(authors, list) and authors:
-        first = authors[0]
-        if isinstance(first, dict):
-            name = first.get("name") or first.get("author", {}).get("display_name") or "anon"
-        else:
-            name = str(first)
-    else:
-        name = "anon"
+    name = "anon"
+    if isinstance(authors, list):
+        for author in authors:
+            if isinstance(author, dict):
+                nested_author = author.get("author") or {}
+                candidate = author.get("name") or nested_author.get("display_name") or ""
+            else:
+                candidate = str(author or "").strip()
+            if candidate:
+                name = candidate
+                break
 
     surname = re.sub(r"[^a-zA-Z0-9]", "", name.split()[-1].lower()) or "anon"
     title_token = re.sub(r"[^a-zA-Z0-9]", "", str(title).split(" ")[0].lower()) or "paper"

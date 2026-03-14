@@ -3,7 +3,29 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
+
+_log = logging.getLogger("muse.draft")
+
+
+_WORD_TO_FLOAT: dict[str, float] = {
+    "高": 0.9, "中": 0.6, "低": 0.3,
+    "high": 0.9, "medium": 0.6, "low": 0.3,
+}
+
+
+def _safe_float(value: Any, default: float = 0.5) -> float:
+    """Convert *value* to float, mapping common CJK/English words to numbers."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().lower()
+    if s in _WORD_TO_FLOAT:
+        return _WORD_TO_FLOAT[s]
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return default
 
 
 def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str, Any]:
@@ -30,6 +52,27 @@ def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str,
         return {"text": ""}
 
 
+def _call_write_llm(llm_client: Any, system: str, user: str, max_retries: int = 2) -> dict[str, Any]:
+    """Call the structured writing route with fallback to raw-text mode."""
+
+    if llm_client is None:
+        return {"text": ""}
+
+    out = None
+    for attempt in range(max_retries + 1):
+        try:
+            out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
+            break
+        except Exception:
+            if attempt < max_retries:
+                continue
+            out = _extract_text_from_raw(llm_client, system, user)
+            break
+    if out is None:
+        return {}
+    return out
+
+
 def write_subtasks(
     *,
     llm_client: Any,
@@ -44,8 +87,9 @@ def write_subtasks(
     prev_text = ""
     prev_by_id = {item["subtask_id"]: item for item in previous}
 
-    for subtask in subtask_plan:
+    for st_idx, subtask in enumerate(subtask_plan):
         sid = subtask["subtask_id"]
+        _log.info("  subtask %d/%d [%s] %s", st_idx + 1, len(subtask_plan), sid, subtask.get("title", "")[:50])
         if sid in prev_by_id and sid not in revision_instructions:
             kept = dict(prev_by_id[sid])
             results.append(kept)
@@ -57,11 +101,11 @@ def write_subtasks(
                 "ref_id": ref["ref_id"],
                 "title": ref.get("title", ""),
                 "year": ref.get("year"),
-                "abstract": (ref.get("abstract") or "")[:300],
+                "abstract": ref.get("abstract") or "",
             }
             for ref in state.get("references", [])
             if isinstance(ref, dict) and ref.get("ref_id")
-        ][:30]
+        ][:50]
 
         local_context: list[dict[str, Any]] = []
         if rag_index is not None:
@@ -75,6 +119,10 @@ def write_subtasks(
             "Write one thesis subsection with citations. "
             "IMPORTANT: for citations_used, use ONLY ref_id values from the available_references list. "
             "Do not invent citation keys not in that list. "
+            "SCOPE GUARD: Write ONLY about the topic defined in subtask.title. "
+            "Do NOT include content that belongs to other subtasks. "
+            "If a related topic is outside this subtask's scope, mention it briefly "
+            "and note that it will be covered in a later section. "
             "Include specific technical details, mathematical notation where appropriate, "
             "and reference concrete experimental results. "
             "Return JSON with keys: "
@@ -96,29 +144,57 @@ def write_subtasks(
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)
 
-        max_retries = 2
-        out = None
-        for attempt in range(max_retries + 1):
-            try:
-                out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
-                break
-            except Exception as exc:
-                if "JSON" in str(exc) and attempt < max_retries:
-                    continue
-                if "JSON" in str(exc):
-                    out = _extract_text_from_raw(llm_client, system, user)
-                    break
-                raise
-        if out is None:
-            out = {}
+        out = _call_write_llm(llm_client, system, user)
 
         text = str(out.get("text", "")).strip()
         if not text:
             text = f"[{chapter_title}] {subtask['title']}\n\n(LLM returned empty content.)"
 
+        target_words = int(subtask.get("target_words", 1200) or 1200)
+        actual_words = len(text.split())
+        ratio = actual_words / max(target_words, 1)
+
+        if ratio < 0.7 and llm_client is not None:
+            _log.info(
+                "  subtask %s word_count_retry ratio=%.2f (target=%d actual=%d)",
+                sid,
+                ratio,
+                target_words,
+                actual_words,
+            )
+            retry_payload = dict(user_payload)
+            retry_payload["revision_instruction"] = (
+                f"当前字数 {actual_words} 远低于目标 {target_words}（{ratio:.0%}）。"
+                "请在保持已有内容的基础上，补充更多技术细节、实验结果分析或文献论证，"
+                f"将字数扩展至 {target_words} 左右。"
+            )
+            retry_out = _call_write_llm(
+                llm_client,
+                system,
+                json.dumps(retry_payload, ensure_ascii=False),
+            )
+            retry_text = str(retry_out.get("text", "")).strip()
+            retry_words = len(retry_text.split())
+            if retry_text and retry_words > actual_words:
+                out = retry_out
+                text = retry_text
+                actual_words = retry_words
+        elif ratio > 1.5:
+            _log.info("  subtask %s word_count_over ratio=%.2f", sid, ratio)
+
         citations_used = out.get("citations_used", [])
         if not isinstance(citations_used, list):
             citations_used = []
+        allowed_set = {ref["ref_id"] for ref in refs_snapshot}
+        hallucinated = [str(c).strip() for c in citations_used if str(c).strip() not in allowed_set]
+        if hallucinated:
+            _log.warning(
+                "subtask %s hallucinated_citations=%d filtered: %s",
+                sid,
+                len(hallucinated),
+                hallucinated[:5],
+            )
+        citations_used = [str(c).strip() for c in citations_used if str(c).strip() in allowed_set]
 
         key_claims = out.get("key_claims", [])
         if not isinstance(key_claims, list):
@@ -132,16 +208,16 @@ def write_subtasks(
             {
                 "subtask_id": sid,
                 "title": subtask.get("title", ""),
-                "target_words": subtask.get("target_words", 1200),
+                "target_words": target_words,
                 "output_text": text,
-                "actual_words": len(text.split()),
+                "actual_words": actual_words,
                 "citations_used": [str(c).strip() for c in citations_used if str(c).strip()],
                 "key_claims": [str(c).strip() for c in key_claims if str(c).strip()],
                 "transition_out": str(out.get("transition_out", "")),
                 "glossary_additions": out.get("glossary_additions", {})
                 if isinstance(out.get("glossary_additions", {}), dict)
                 else {},
-                "confidence": float(assessment.get("confidence", 0.5)),
+                "confidence": _safe_float(assessment.get("confidence", 0.5)),
                 "weak_spots": assessment.get("weak_spots", [])
                 if isinstance(assessment.get("weak_spots", []), list)
                 else [],
@@ -151,4 +227,3 @@ def write_subtasks(
         prev_text = text
 
     return results
-

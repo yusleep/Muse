@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from muse.prompts.search_queries import search_queries_prompt
+
+_log = logging.getLogger("muse.search")
+
+_ONLINE_QUERY_BUDGET = 4
+_LOCAL_REFS_QUERY_BUDGET = 2
 
 
 def _generate_search_queries(
@@ -20,6 +26,10 @@ def _generate_search_queries(
         return [str(query).strip() for query in queries if str(query).strip()][:count]
     except Exception:
         return []
+
+
+def _search_query_budget(*, local_refs_count: int) -> int:
+    return _LOCAL_REFS_QUERY_BUDGET if local_refs_count > 0 else _ONLINE_QUERY_BUDGET
 
 
 def _summarize_references(references: list[dict[str, Any]]) -> str:
@@ -39,10 +49,20 @@ def build_search_node(settings: Any, services: Any):
         llm = getattr(services, "llm", None)
         search_client = getattr(services, "search", None)
         local_refs = list(getattr(services, "local_refs", []) or [])
+        query_budget = _search_query_budget(local_refs_count=len(local_refs))
 
         extra_queries = None
-        if llm is not None:
-            extra_queries = _generate_search_queries(llm, topic, discipline, 7) or None
+        if llm is not None and query_budget > 0:
+            extra_queries = _generate_search_queries(llm, topic, discipline, query_budget) or None
+
+        _log.info(
+            "search node start topic=%r discipline=%r local_refs=%d query_budget=%d extra_queries=%d",
+            topic,
+            discipline,
+            len(local_refs),
+            query_budget,
+            len(extra_queries or []),
+        )
 
         references, queries = search_client.search_multi_source(
             topic=topic,
@@ -53,6 +73,13 @@ def build_search_node(settings: Any, services: Any):
         if local_refs:
             local_ref_ids = {ref.get("ref_id") for ref in local_refs}
             references = local_refs + [ref for ref in references if ref.get("ref_id") not in local_ref_ids]
+
+        _log.info(
+            "search node end references=%d search_queries=%d local_refs=%d",
+            len(references),
+            len(queries) if isinstance(queries, list) else 0,
+            len(local_refs),
+        )
 
         return {
             "references": references,

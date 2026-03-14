@@ -80,6 +80,8 @@ class ChapterReActAgentTests(unittest.TestCase):
         )
         self.assertIn("chapter", prompt.lower())
         self.assertIn("submit", prompt.lower())
+        self.assertIn("provided references", prompt.lower())
+        self.assertIn("do not repeat", prompt.lower())
 
 
 class FanOutChaptersTests(unittest.TestCase):

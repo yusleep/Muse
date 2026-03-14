@@ -1,14 +1,25 @@
 """Review tools for multi-lens chapter evaluation."""
 
-from __future__ import annotations
-
 import json
+from typing import Annotated
 from typing import Any
 
+from langchain.tools import ToolRuntime
+from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
 from muse.graph.helpers.review_state import build_revision_instructions
-from muse.prompts.chapter_review import chapter_review_prompt
+from muse.prompts.chapter_review import chapter_review_prompt_for_lens
+from muse.tools._context import AgentRuntimeContext
+
+MuseToolRuntime = ToolRuntime[AgentRuntimeContext, Any]
+
+
+def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
+    from muse.tools._context import get_services, services_from_runtime
+
+    services = services_from_runtime(runtime)
+    return services if services is not None else get_services()
 
 
 @tool
@@ -16,12 +27,12 @@ def self_review(
     chapter_title: str,
     merged_text: str,
     lenses: str = "logic,style,citation,structure",
+    *,
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
 ) -> str:
     """Run a multi-lens quality review on a chapter draft."""
 
-    from muse.tools._context import get_services
-
-    services = get_services()
+    services = _services_from_runtime(runtime)
     llm = getattr(services, "llm", None)
     lens_list = [lens.strip() for lens in lenses.split(",") if lens.strip()]
     if not lens_list:
@@ -30,8 +41,7 @@ def self_review(
     packets: list[dict[str, Any]] = []
     if llm is not None:
         for lens in lens_list:
-            system, user = chapter_review_prompt(chapter_title, merged_text)
-            system = f"{system} Focus primarily on {lens}."
+            system, user = chapter_review_prompt_for_lens(chapter_title, merged_text, lens)
             try:
                 payload = llm.structured(
                     system=system,

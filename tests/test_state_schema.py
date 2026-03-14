@@ -78,6 +78,27 @@ class ChapterRevisionInstructionTests(unittest.TestCase):
         self.assertEqual(list(revisions.keys()), ["sub_01"])
         self.assertIn("过渡段", revisions["sub_01"])
 
+    def test_build_revision_instructions_merges_multiple_notes_for_same_subtask(self):
+        review_notes = [
+            {
+                "subtask_id": "sub_01",
+                "issue": "衔接不足",
+                "instruction": "补充过渡段。",
+                "severity": 3,
+            },
+            {
+                "subtask_id": "sub_01",
+                "issue": "论证太短",
+                "instruction": "补充对比分析。",
+                "severity": 2,
+            },
+        ]
+
+        revisions = build_revision_instructions(review_notes, min_severity=2)
+
+        self.assertIn("- 补充过渡段。", revisions["sub_01"])
+        self.assertIn("- 补充对比分析。", revisions["sub_01"])
+
 
 if __name__ == "__main__":
     unittest.main()

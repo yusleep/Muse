@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from typing import Mapping
 
 
@@ -26,12 +27,12 @@ def should_iterate(state: Mapping[str, object], threshold: int = 4) -> str:
 
 
 def build_revision_instructions(
-    review_notes: list[dict[str, object]],
+    review_notes: list[dict[str, Any]],
     min_severity: int = 2,
 ) -> dict[str, str]:
     """Build subtask-specific revision instructions from chapter review notes."""
 
-    instructions: dict[str, str] = {}
+    instruction_lists: dict[str, list[str]] = {}
     for note in review_notes:
         if not isinstance(note, dict):
             continue
@@ -46,9 +47,15 @@ def build_revision_instructions(
         if not isinstance(severity, (int, float)) or int(severity) < min_severity:
             continue
 
-        instructions[subtask_id] = instruction.strip()
+        instruction_lists.setdefault(subtask_id, [])
+        cleaned_instruction = instruction.strip()
+        if cleaned_instruction not in instruction_lists[subtask_id]:
+            instruction_lists[subtask_id].append(cleaned_instruction)
 
-    return instructions
+    return {
+        sid: "\n".join(f"- {instruction}" for instruction in instructions)
+        for sid, instructions in instruction_lists.items()
+    }
 
 
 def apply_chapter_review(
@@ -74,4 +81,3 @@ def apply_chapter_review(
 
     route = should_iterate(state, threshold=score_threshold)
     return route, state
-

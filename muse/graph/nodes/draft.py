@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from langgraph.types import Send
 
 from muse.graph.helpers.draft_support import write_subtasks
 
+_log = logging.getLogger("muse.draft")
+
 
 def build_chapter_draft_node(services: Any):
     def chapter_draft(state: dict[str, Any]) -> dict[str, Any]:
         chapter_plan = state.get("chapter_plan", {})
+        ch_id = chapter_plan.get("chapter_id", "?")
+        ch_title = chapter_plan.get("chapter_title", "?")
+        n_subtasks = len(chapter_plan.get("subtask_plan", []))
+        _log.info("[chapter %s] writing '%s' (%d subtasks)", ch_id, ch_title[:40], n_subtasks)
         subtask_results = write_subtasks(
             llm_client=getattr(services, "llm", None),
             state={
@@ -59,6 +66,7 @@ def build_chapter_draft_node(services: Any):
 def fan_out_chapters(state: dict[str, Any]) -> list[Send]:
     references = state.get("references", [])
     topic = state.get("topic", "")
+    discipline = state.get("discipline", "")
     language = state.get("language", "zh")
     return [
         Send(
@@ -67,6 +75,7 @@ def fan_out_chapters(state: dict[str, Any]) -> list[Send]:
                 "chapter_plan": plan,
                 "references": references,
                 "topic": topic,
+                "discipline": discipline,
                 "language": language,
                 "subtask_results": [],
                 "merged_text": "",

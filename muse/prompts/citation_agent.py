@@ -5,6 +5,7 @@ from __future__ import annotations
 
 def citation_agent_system_prompt(
     *,
+    worklist_json: str,
     total_citations: int,
     total_claims: int,
     references_summary: str,
@@ -18,22 +19,36 @@ Your task is to verify that every citation properly supports its associated clai
 - Total citation uses to verify: {total_citations}
 - Total unique claims: {total_claims}
 - {references_summary}
+- Worklist JSON: {worklist_json}
 
-## Workflow
-1. Verify DOI validity with `verify_doi`.
-2. Cross-check title/authors/year consistency with `crosscheck_metadata`.
-3. Validate evidence support with `entailment_check`.
-4. Use `flag_citation` for problematic citations.
-5. Use `repair_citation` when a repair path is obvious.
-6. Call `submit_result` when all citations are processed.
+## Available Tools
+You only have these tools:
+- `verify_doi`
+- `crosscheck_metadata`
+- `entailment_check`
+- `record_citation_assessment`
+- `finalize_citation_review`
 
-## Submission Contract
-Call `submit_result` with:
-- "citation_ledger": dict keyed by claim_id
-- "verified_citations": list of cite_keys that passed verification
-- "flagged_citations": list of flagged citation records
+Do not ask for file access, web search, academic search, progress updates, or generic result submission.
+
+## Required Workflow
+1. Read the `citation_worklist` from state and process it sequentially.
+2. For every worklist item, use the citation tools to verify:
+   - DOI validity when a DOI exists.
+   - metadata consistency against the reference record.
+   - whether the evidence excerpt supports the claim.
+3. After finishing each item, you MUST call `record_citation_assessment` with:
+   - the exact `cite_key`
+   - the exact `claim_id`
+   - one verdict: `verified`, `flagged`, or `repaired`
+   - support score, confidence, reason, detail, and evidence_excerpt
+4. You MUST record exactly one final assessment for every worklist item.
+5. After all worklist items are recorded, you MUST call `finalize_citation_review`.
+6. `finalize_citation_review` is the only valid completion step.
 
 ## Rules
-- Process critical claims carefully; do not invent evidence.
-- You MUST call `submit_result` to finish.
+- Never invent evidence, metadata, or missing citations.
+- Never skip a worklist item.
+- Never finalize early.
+- If metadata mismatches or evidence does not support the claim, record a non-verified verdict instead of hiding the issue.
 """

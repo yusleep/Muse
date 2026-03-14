@@ -64,6 +64,14 @@ class _FakeLLMClient:
         return {}
 
 
+class _ManyQueriesLLMClient:
+    """LLM double that returns more queries than the node should use."""
+
+    def structured(self, *, system, user, route, max_tokens):
+        del system, user, route, max_tokens
+        return {"queries": [f"query {idx}" for idx in range(10)]}
+
+
 class _SearchServices:
     def __init__(self, *, search=None, llm=None, local_refs=None, rag_index=None):
         self.search = search or _FakeSearchClient()
@@ -153,6 +161,30 @@ class TestStage1LocalRefs(unittest.TestCase):
         self.assertIsInstance(search.last_extra_queries, list)
         self.assertGreater(len(search.last_extra_queries), 0)
 
+    def test_local_refs_reduce_online_query_budget(self):
+        state = _make_state()
+        search = _FakeSearchClient()
+        llm = _ManyQueriesLLMClient()
+        local = self._make_local_refs(2)
+        node = build_search_node(None, _SearchServices(search=search, llm=llm, local_refs=local))
+
+        node({"topic": state["topic"], "discipline": state["discipline"]})
+
+        self.assertEqual(search.last_extra_queries, ["query 0", "query 1"])
+
+    def test_online_only_search_uses_capped_query_budget(self):
+        state = _make_state()
+        search = _FakeSearchClient()
+        llm = _ManyQueriesLLMClient()
+        node = build_search_node(None, _SearchServices(search=search, llm=llm))
+
+        node({"topic": state["topic"], "discipline": state["discipline"]})
+
+        self.assertEqual(
+            search.last_extra_queries,
+            ["query 0", "query 1", "query 2", "query 3"],
+        )
+
     def test_no_extra_queries_without_llm(self):
         state = _make_state()
         search = _FakeSearchClient()
@@ -228,6 +260,227 @@ class TestRefsSnapshotHasAbstract(unittest.TestCase):
         self.assertTrue(len(snapshot) > 0)
         self.assertIn("abstract", snapshot[0])
         self.assertIn("Important abstract", snapshot[0]["abstract"])
+
+    def test_write_subtasks_keeps_full_abstract_and_caps_snapshot_at_50(self):
+        long_abstract = "A" * 500
+        refs = [
+            {
+                "ref_id": f"@r{i:02d}",
+                "title": f"Paper {i}",
+                "year": 2023,
+                "abstract": long_abstract if i == 1 else f"Abstract {i}",
+            }
+            for i in range(1, 52)
+        ]
+
+        received_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                payload = json.loads(user)
+                received_payloads.append(payload)
+                return {
+                    "text": "word " * 500,
+                    "citations_used": ["@r01"],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=refs)
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "ch01_s01", "title": "Intro", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        snapshot = received_payloads[0].get("available_references", [])
+        self.assertEqual(len(snapshot), 50)
+        self.assertEqual(snapshot[0]["abstract"], long_abstract)
+
+
+class TestWriteSubtasksWordCountRetry(unittest.TestCase):
+    def test_short_draft_triggers_one_expansion_retry(self):
+        calls = []
+
+        class _RetryLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                payload = json.loads(user)
+                calls.append(payload)
+                if len(calls) == 1:
+                    return {
+                        "text": "word " * 300,
+                        "citations_used": [],
+                        "key_claims": [],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {"confidence": 0.5, "weak_spots": [], "needs_revision": False},
+                    }
+                return {
+                    "text": "word " * 820,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.6, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_RetryLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn("远低于目标", calls[1].get("revision_instruction", ""))
+        self.assertEqual(results[0]["actual_words"], 820)
+
+    def test_near_target_draft_does_not_retry(self):
+        calls = []
+
+        class _StableLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                calls.append(1)
+                return {
+                    "text": "word " * 950,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_StableLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(results[0]["actual_words"], 950)
+
+    def test_retry_result_must_be_longer_to_replace_original(self):
+        calls = []
+
+        class _WorseRetryLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                calls.append(1)
+                if len(calls) == 1:
+                    return {
+                        "text": "word " * 300,
+                        "citations_used": [],
+                        "key_claims": [],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {"confidence": 0.4, "weak_spots": [], "needs_revision": False},
+                    }
+                return {
+                    "text": "word " * 250,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.5, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        results = write_subtasks(
+            llm_client=_WorseRetryLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 1000}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(results[0]["actual_words"], 300)
+
+
+class TestWriteSubtasksCitationAllowlist(unittest.TestCase):
+    def test_write_subtasks_filters_hallucinated_citations_and_logs_warning(self):
+        class _CitationLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, user, route, max_tokens
+                return {
+                    "text": "Subsection text.",
+                    "citations_used": ["@r1", "@hallucinated"],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[
+                {
+                    "ref_id": "@r1",
+                    "title": "Paper",
+                    "year": 2024,
+                    "abstract": "Known abstract",
+                }
+            ]
+        )
+
+        with self.assertLogs("muse.draft", level="WARNING") as logs:
+            results = write_subtasks(
+                llm_client=_CitationLLM(),
+                state=state,
+                chapter_title="Chapter 1",
+                subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 200}],
+                revision_instructions={},
+                previous=[],
+            )
+
+        self.assertEqual(results[0]["citations_used"], ["@r1"])
+        self.assertTrue(any("hallucinated_citations=1" in message for message in logs.output))
+
+
+class TestWriteSubtasksScopeGuard(unittest.TestCase):
+    def test_write_subtasks_prompt_includes_scope_guard(self):
+        seen_systems = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del user, route, max_tokens
+                seen_systems.append(system)
+                return {
+                    "text": "word " * 200,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(references=[])
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 1",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Intro", "target_words": 200}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(len(seen_systems), 1)
+        self.assertIn("SCOPE GUARD", seen_systems[0])
 
 
 # ---------------------------------------------------------------------------
