@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：1/5 phases, 9/28 steps
+- **总进度**：1/5 phases, 10/28 steps
 - **当前 Wave**：Wave 2
-- **下一步**：Phase 2 Step 2.2
+- **下一步**：Phase 2 Step 2.3
 
 ---
 
@@ -25,9 +25,9 @@
 
 ## Wave 2 — Reliability
 
-### Phase 2: Reliability Hardening (1/5)
+### Phase 2: Reliability Hardening (2/5)
 - [x] Step 2.1: ReAct 递归上限 — 累积器 + 补写缺失 subtask (~60 行)
-- [ ] Step 2.2: Revision stall 检测 — 文本相似度 + 分数趋势 (~12 行)
+- [x] Step 2.2: Revision stall 检测 — 文本相似度 + 分数趋势 (~12 行)
 - [ ] Step 2.3: Self-assessment 利用 — confidence 驱动优先修订 (~20 行)
 - [ ] Step 2.4: Web search / image search stub 替换 (~15 行)
 - [ ] Step 2.5: PaperIndexService — LlamaIndex 全文索引 + 段落级语义检索 (~250 行)
@@ -73,3 +73,4 @@
 - 2026-03-14: 前序 V2.1 计划（6 Phases, 39 Tasks）已全部完成
 - 2026-03-14: Phase 2 Step 2.5 设计升级为 PaperIndexService（LlamaIndex），替代原 PaperContentClient（pymupdf）
 - 2026-03-14: 完成 Phase 2 Step 2.1，删除 chapter fallback graph，改为 partial recovery + 显式失败
+- 2026-03-14: 完成 Phase 2 Step 2.2，为 should_iterate 增加文本/分数 stall 检测
