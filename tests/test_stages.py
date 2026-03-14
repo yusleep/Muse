@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from muse.config import Settings
+from muse.graph.nodes.initialize import build_initialize_node
 from muse.graph.nodes.export import build_export_node
 from muse.graph.nodes.search import build_search_node
 
@@ -31,6 +32,8 @@ class _Services:
         self.llm = None
         self.local_refs = []
         self.rag_index = None
+        self.paper_index = None
+        self.http = object()
 
 
 class GraphEntryNodeTests(unittest.TestCase):
@@ -55,6 +58,77 @@ class GraphEntryNodeTests(unittest.TestCase):
         self.assertEqual(len(result["references"]), 1)
         self.assertTrue(result["search_queries"])
         self.assertIn("Paper 1", result["literature_summary"])
+
+    def test_initialize_node_marks_paper_index_ready_when_local_papers_ingested(self):
+        class _PaperIndex:
+            def ingest_local(self, dir_path):
+                self.last_dir = dir_path
+                return {
+                    "@localpdf": {
+                        "source": "local",
+                        "indexed": True,
+                        "available_sections": ["Method"],
+                    }
+                }
+
+        services = _Services()
+        services.paper_index = _PaperIndex()
+        settings = self._make_settings("runs")
+        object.__setattr__(settings, "local_papers_dir", "refs-papers")
+        node = build_initialize_node(settings, services)
+
+        result = node({})
+
+        self.assertTrue(result["paper_index_ready"])
+        self.assertIn("@localpdf", result["indexed_papers"])
+
+    def test_initialize_node_restores_persisted_index_metadata(self):
+        class _PaperIndex:
+            def indexed_papers(self):
+                return {
+                    "@persisted": {
+                        "source": "online",
+                        "indexed": True,
+                        "available_sections": ["Results"],
+                    }
+                }
+
+        services = _Services()
+        services.paper_index = _PaperIndex()
+        node = build_initialize_node(self._make_settings("runs"), services)
+
+        result = node({})
+
+        self.assertTrue(result["paper_index_ready"])
+        self.assertIn("@persisted", result["indexed_papers"])
+
+    def test_search_node_ingests_online_papers_when_full_text_enabled(self):
+        class _PaperIndex:
+            def __init__(self):
+                self.calls = []
+
+            def ingest_online(self, references, http):
+                self.calls.append((references, http))
+                return {
+                    "@paper1": {
+                        "source": "online",
+                        "indexed": True,
+                        "available_sections": ["Results"],
+                    }
+                }
+
+        services = _Services()
+        services.paper_index = _PaperIndex()
+        settings = self._make_settings("runs")
+        object.__setattr__(settings, "fetch_full_text", True)
+        object.__setattr__(settings, "max_papers_to_index", 1)
+        node = build_search_node(settings, services)
+
+        result = node({"topic": "topic", "discipline": "cs"})
+
+        self.assertTrue(result["paper_index_ready"])
+        self.assertIn("@paper1", result["indexed_papers"])
+        self.assertEqual(len(services.paper_index.calls[0][0]), 1)
 
     def test_export_node_blocks_when_flagged_citations_are_contradictions(self):
         with tempfile.TemporaryDirectory() as tmp:

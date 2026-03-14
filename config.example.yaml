@@ -52,6 +52,11 @@ search:
   semantic_scholar_api_key: ${SEMANTIC_SCHOLAR_API_KEY}
   openalex_email: user@example.com
   crossref_mailto: user@example.com
+  fetch_full_text: false
+  llamaparse_api_key: ${LLAMAPARSE_API_KEY}
+  max_papers_to_index: 20
+  local_papers_dir: ""
+  local_priority: true
 
 # ---- middleware ----
 middleware:

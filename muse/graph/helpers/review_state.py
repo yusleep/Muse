@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from typing import Mapping
 
 
-def should_iterate(state: Mapping[str, object], threshold: int = 4) -> str:
+def should_iterate(
+    state: Mapping[str, object],
+    threshold: int = 4,
+    *,
+    previous_min_score: int | None = None,
+    previous_text_hash: str | None = None,
+    current_text: str = "",
+) -> str:
     """Route chapter flow to either `revise` or `done`."""
 
     raw_scores = state.get("quality_scores", {})
@@ -23,6 +31,15 @@ def should_iterate(state: Mapping[str, object], threshold: int = 4) -> str:
         return "done"
     if current_iteration >= max_iterations:
         return "done"
+
+    if previous_text_hash is not None and current_text:
+        current_hash = hashlib.md5(current_text.encode()).hexdigest()
+        if current_hash == previous_text_hash:
+            return "done"
+
+    if previous_min_score is not None and min_score <= previous_min_score and current_iteration >= 2:
+        return "done"
+
     return "revise"
 
 

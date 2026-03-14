@@ -9,6 +9,7 @@ from typing import Any
 
 from .config import Settings
 from .providers import AcademicSearchClient, CitationMetadataClient, HttpClient, LLMClient
+from .services.paper_index import PaperIndexService
 from .store import RunStore
 
 
@@ -80,8 +81,12 @@ class Runtime:
 
         self.local_refs: list[dict[str, Any]] = []
         self.rag_index: Any = None
+        self.paper_index: Any = None
+        self._paper_index_thread_id: str | None = None
         if settings.refs_dir:
             self._init_local_refs(settings.refs_dir)
+        if getattr(settings, "fetch_full_text", False):
+            self._ensure_paper_index("_runtime")
 
     def _init_local_refs(self, refs_dir: str) -> None:
         try:
@@ -93,6 +98,10 @@ class Runtime:
             _warn(f"Failed to load local refs from {refs_dir!r}: {exc}")
             self.local_refs = []
 
+        if getattr(self.settings, "fetch_full_text", False):
+            self.rag_index = None
+            return
+
         if self.local_refs:
             try:
                 from .rag import RagIndex
@@ -103,7 +112,28 @@ class Runtime:
                 _warn(f"Failed to build RAG index: {exc}")
                 self.rag_index = None
 
+    def _ensure_paper_index(self, thread_id: str) -> Any:
+        if not getattr(self.settings, "fetch_full_text", False):
+            self.paper_index = None
+            self._paper_index_thread_id = None
+            return None
+
+        normalized_thread_id = str(thread_id or "_runtime")
+        if self.paper_index is not None and self._paper_index_thread_id == normalized_thread_id:
+            return self.paper_index
+
+        run_dir = Path(self.settings.runs_dir) / normalized_thread_id
+        self.paper_index = PaperIndexService(
+            llamaparse_api_key=getattr(self.settings, "llamaparse_api_key", ""),
+            cache_dir=run_dir / "papers",
+            index_dir=run_dir / "paper_index",
+            local_priority=bool(getattr(self.settings, "local_priority", True)),
+        )
+        self._paper_index_thread_id = normalized_thread_id
+        return self.paper_index
+
     def build_graph(self, *, thread_id: str, auto_approve: bool = True):
+        self._ensure_paper_index(thread_id)
         build_langgraph = _load_graph_builder()
         return build_langgraph(
             self.settings,

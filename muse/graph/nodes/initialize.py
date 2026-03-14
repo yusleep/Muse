@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -9,7 +10,7 @@ def build_initialize_node(settings: Any, services: Any):
     def initialize(state: dict[str, Any]) -> dict[str, Any]:
         local_refs = list(getattr(services, "local_refs", []) or [])
         rag_index = getattr(services, "rag_index", None)
-        return {
+        result = {
             "project_id": state.get("project_id", ""),
             "topic": state.get("topic", ""),
             "discipline": state.get("discipline", "general"),
@@ -42,5 +43,27 @@ def build_initialize_node(settings: Any, services: Any):
             "rag_enabled": rag_index is not None,
             "local_refs_count": len(local_refs),
         }
+        paper_index = getattr(services, "paper_index", None)
+        persisted_indexed = {}
+        if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+            try:
+                persisted_indexed = paper_index.indexed_papers()
+            except Exception:  # noqa: BLE001
+                persisted_indexed = {}
+        if persisted_indexed:
+            result["indexed_papers"] = persisted_indexed
+            result["paper_index_ready"] = True
+        local_papers_dir = str(getattr(settings, "local_papers_dir", "") or "").strip()
+        if paper_index is not None and local_papers_dir:
+            try:
+                indexed_papers = paper_index.ingest_local(Path(local_papers_dir))
+            except Exception:  # noqa: BLE001
+                indexed_papers = {}
+            if indexed_papers:
+                merged_indexed = dict(persisted_indexed)
+                merged_indexed.update(indexed_papers)
+                result["indexed_papers"] = merged_indexed
+                result["paper_index_ready"] = True
+        return result
 
     return initialize

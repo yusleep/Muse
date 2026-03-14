@@ -89,10 +89,24 @@ def _state_from_runtime(runtime: MuseToolRuntime | None) -> dict[str, Any]:
 
 
 @tool
-def web_search(query: str) -> str:
+def web_search(
+    query: str,
+    *,
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
+) -> str:
     """Search the web for general knowledge relevant to thesis writing."""
 
-    return f"[web_search] No web search provider configured. Query: {query}"
+    services = _services_from_runtime(runtime)
+    web_search_client = getattr(services, "web_search_client", None)
+    if web_search_client is None:
+        return f"[web_search] No web search provider configured. Query: {query}"
+
+    try:
+        results = web_search_client.search(query)
+    except Exception as exc:  # noqa: BLE001
+        return f"[web_search] Search failed: {exc}. Query: {query}"
+
+    return json.dumps(results, ensure_ascii=False)
 
 
 @tool
@@ -152,9 +166,24 @@ def retrieve_local_refs(
     services = _services_from_runtime(runtime)
     tool_state = _state_from_runtime(runtime)
     rag_index = getattr(services, "rag_index", None)
+    paper_index = getattr(services, "paper_index", None)
+    persisted_indexed = {}
+    if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+        try:
+            persisted_indexed = paper_index.indexed_papers()
+        except Exception:  # noqa: BLE001
+            persisted_indexed = {}
+    paper_index_ready = bool(tool_state.get("paper_index_ready", False) or persisted_indexed)
 
     results: list[dict[str, Any]] = []
-    if rag_index is not None:
+    if paper_index is not None and paper_index_ready:
+        try:
+            raw_results = paper_index.query(query, top_k=top_k)
+            if isinstance(raw_results, list):
+                results = [item for item in raw_results if isinstance(item, dict)]
+        except Exception:  # noqa: BLE001
+            results = []
+    elif rag_index is not None:
         try:
             raw_results = rag_index.retrieve(query, top_k=top_k)
             if isinstance(raw_results, list):
@@ -169,6 +198,36 @@ def retrieve_local_refs(
             state=tool_state,
         )
 
+    return json.dumps(results, ensure_ascii=False)
+
+
+@tool
+def get_paper_section(
+    paper_id: str,
+    section_title: str,
+    query: str,
+    *,
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
+) -> str:
+    """Retrieve detailed content from a specific paper section."""
+
+    services = _services_from_runtime(runtime)
+    paper_index = getattr(services, "paper_index", None)
+    if paper_index is None:
+        return "No content found for this section"
+
+    try:
+        results = paper_index.get_section(
+            paper_id=paper_id,
+            section_title=section_title,
+            query=query,
+            top_k=10,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return f"[get_paper_section] Lookup failed: {exc}"
+
+    if not isinstance(results, list) or not results:
+        return "No content found for this section"
     return json.dumps(results, ensure_ascii=False)
 
 

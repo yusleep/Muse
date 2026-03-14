@@ -119,40 +119,38 @@ class FullPipelineIntegrationTest(unittest.TestCase):
         graph = build_graph(services=_IntegrationServices(), auto_approve=True)
         self.assertIsNotNone(graph)
 
-    def test_chapter_subgraph_fallback_path(self):
-        from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
+    def test_chapter_subgraph_requires_react_agent_for_nonempty_workload(self):
+        from muse.graph.subgraphs.chapter import ChapterAgentExecutionError, build_chapter_subgraph_node
 
         node_fn = build_chapter_subgraph_node(services=_IntegrationServices())
-        result = node_fn(
-            {
-                "chapter_plan": {
-                    "chapter_id": "ch_01",
-                    "chapter_title": "Introduction",
-                    "subtask_plan": [
-                        {
-                            "subtask_id": "sub_01",
-                            "title": "Background",
-                            "target_words": 500,
-                        }
-                    ],
-                },
-                "references": [],
-                "topic": "Test",
-                "language": "zh",
-                "subtask_results": [],
-                "merged_text": "",
-                "quality_scores": {},
-                "review_notes": [],
-                "revision_instructions": {},
-                "iteration": 0,
-                "max_iterations": 1,
-                "citation_uses": [],
-                "claim_text_by_id": {},
-            }
-        )
-        self.assertIn("chapters", result)
-        self.assertIn("ch_01", result["chapters"])
-        self.assertIn("merged_text", result["chapters"]["ch_01"])
+        with self.assertRaises(ChapterAgentExecutionError):
+            node_fn(
+                {
+                    "chapter_plan": {
+                        "chapter_id": "ch_01",
+                        "chapter_title": "Introduction",
+                        "subtask_plan": [
+                            {
+                                "subtask_id": "sub_01",
+                                "title": "Background",
+                                "target_words": 500,
+                            }
+                        ],
+                    },
+                    "references": [],
+                    "topic": "Test",
+                    "language": "zh",
+                    "subtask_results": [],
+                    "merged_text": "",
+                    "quality_scores": {},
+                    "review_notes": [],
+                    "revision_instructions": {},
+                    "iteration": 0,
+                    "max_iterations": 1,
+                    "citation_uses": [],
+                    "claim_text_by_id": {},
+                }
+            )
 
     def test_citation_subgraph_react_path(self):
         from muse.graph.subgraphs.citation import build_citation_subgraph_node

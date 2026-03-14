@@ -54,19 +54,21 @@ class _ChapterServices:
 
 class _ChapterNoSubmitAgent:
     def invoke(self, agent_input, config, **kwargs):
-        del agent_input, config, kwargs
-        return {
-            "messages": [
-                {
-                    "tool_calls": [
-                        {
-                            "name": "update_plan",
-                            "args": {"progress_pct": 40, "current_step": "drafting"},
-                        }
-                    ]
-                }
-            ]
-        }
+        del config, kwargs
+        from muse.tools.writing import write_section
+
+        subtask = agent_input["chapter_plan"]["subtask_plan"][0]
+        write_section.func(
+            chapter_title=agent_input["chapter_plan"]["chapter_title"],
+            subtask_id=subtask["subtask_id"],
+            subtask_title=subtask["title"],
+            target_words=subtask["target_words"],
+            topic=agent_input["topic"],
+            language=agent_input["language"],
+            references_json=json.dumps(agent_input["references"], ensure_ascii=False),
+            runtime=None,
+        )
+        return {"messages": []}
 
 
 class _CitationServices:
@@ -164,7 +166,7 @@ class ReactRuntimeLoggingTests(unittest.TestCase):
             "flagged_citations": [],
         }
 
-    def test_chapter_react_logs_missing_submit_fallback_reason(self):
+    def test_chapter_react_logs_partial_recovery_when_submit_is_missing(self):
         from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
 
         with patch(
@@ -179,7 +181,7 @@ class ReactRuntimeLoggingTests(unittest.TestCase):
         joined = "\n".join(logs.output)
         self.assertIn("chapter react start chapter_id=ch_01", joined)
         self.assertIn("chapter react invoke_return chapter_id=ch_01", joined)
-        self.assertIn("reason=missing_submit_result", joined)
+        self.assertIn("chapter react partial_recovery chapter_id=ch_01", joined)
         self.assertIn("chapters", result)
 
     def test_citation_react_logs_finalize_status_before_validation_error(self):

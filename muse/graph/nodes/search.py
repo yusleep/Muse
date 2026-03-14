@@ -69,9 +69,10 @@ def build_search_node(settings: Any, services: Any):
             discipline=discipline,
             extra_queries=extra_queries,
         )
+        local_ref_ids: set[str] = set()
 
         if local_refs:
-            local_ref_ids = {ref.get("ref_id") for ref in local_refs}
+            local_ref_ids = {str(ref.get("ref_id", "")).strip() for ref in local_refs}
             references = local_refs + [ref for ref in references if ref.get("ref_id") not in local_ref_ids]
 
         _log.info(
@@ -81,12 +82,40 @@ def build_search_node(settings: Any, services: Any):
             len(local_refs),
         )
 
-        return {
+        result = {
             "references": references,
             "search_queries": queries,
             "literature_summary": _summarize_references(references),
             "local_refs_count": len(local_refs),
             "rag_enabled": getattr(services, "rag_index", None) is not None,
         }
+        paper_index = getattr(services, "paper_index", None)
+        persisted_indexed = {}
+        if paper_index is not None and hasattr(paper_index, "indexed_papers"):
+            try:
+                persisted_indexed = paper_index.indexed_papers()
+            except Exception:  # noqa: BLE001
+                persisted_indexed = {}
+        if persisted_indexed:
+            result["indexed_papers"] = persisted_indexed
+            result["paper_index_ready"] = True
+        if paper_index is not None and bool(getattr(settings, "fetch_full_text", False)):
+            http_client = getattr(services, "api_http", None) or getattr(services, "http", None)
+            max_papers = int(getattr(settings, "max_papers_to_index", 20) or 20)
+            online_candidates = [
+                ref
+                for ref in references
+                if isinstance(ref, dict) and str(ref.get("ref_id", "")).strip() not in local_ref_ids
+            ]
+            try:
+                indexed_papers = paper_index.ingest_online(online_candidates[:max_papers], http_client)
+            except Exception:  # noqa: BLE001
+                indexed_papers = {}
+            if indexed_papers:
+                merged_indexed = dict(persisted_indexed)
+                merged_indexed.update(indexed_papers)
+                result["indexed_papers"] = merged_indexed
+                result["paper_index_ready"] = True
+        return result
 
     return search

@@ -40,17 +40,22 @@ class ReactContextSchemaTests(unittest.TestCase):
         def fake_create_agent(*, model, tools, middleware, state_schema, context_schema, name):
             captured["state_schema"] = state_schema
             captured["context_schema"] = context_schema
+            captured["tool_names"] = [tool.name for tool in tools]
             return object()
 
         with patch("langchain.agents.create_agent", side_effect=fake_create_agent), patch(
             "muse.graph.subgraphs.chapter._create_react_model",
             return_value=object(),
         ):
-            agent = _build_react_chapter_agent(services=SimpleNamespace(), settings=object())
+            agent = _build_react_chapter_agent(
+                services=SimpleNamespace(paper_index=object()),
+                settings=object(),
+            )
 
         self.assertIsNotNone(agent)
         self.assertIs(captured["state_schema"], ChapterState)
         self.assertIsNotNone(captured["context_schema"])
+        self.assertIn("get_paper_section", captured["tool_names"])
 
     def test_composition_agent_passes_context_schema(self):
         from muse.graph.subgraphs.composition import CompositionState, _build_react_composition_agent

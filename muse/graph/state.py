@@ -26,11 +26,16 @@ class MuseState(TypedDict, total=False):
     references: Annotated[list[dict[str, Any]], operator.add]
     search_queries: list[str]
     literature_summary: str
+    paper_index_ready: bool
+    indexed_papers: Annotated[dict[str, dict[str, Any]], _merge_dict]
 
     outline: dict[str, Any]
     chapter_plans: list[dict[str, Any]]
 
     chapters: Annotated[dict[str, Any], _merge_dict]
+    quality_scores: dict[str, Any]
+    review_notes: Annotated[list[dict[str, Any]], operator.add]
+    revision_instructions: Annotated[dict[str, str], _merge_dict]
     citation_uses: Annotated[list[dict[str, Any]], operator.add]
     citation_ledger: Annotated[dict[str, Any], _merge_dict]
     claim_text_by_id: Annotated[dict[str, str], _merge_dict]

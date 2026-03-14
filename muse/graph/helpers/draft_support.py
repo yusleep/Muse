@@ -73,6 +73,47 @@ def _call_write_llm(llm_client: Any, system: str, user: str, max_retries: int = 
     return out
 
 
+def _build_refs_snapshot(
+    *,
+    state: dict[str, Any],
+    references: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    refs = references if isinstance(references, list) else state.get("references", [])
+    if not isinstance(refs, list):
+        refs = []
+    indexed_papers = state.get("indexed_papers", {})
+    if not isinstance(indexed_papers, dict):
+        indexed_papers = {}
+
+    snapshot: list[dict[str, Any]] = []
+    for ref in refs:
+        if not isinstance(ref, dict) or not ref.get("ref_id"):
+            continue
+        ref_id = str(ref.get("ref_id", "")).strip()
+        indexed_meta = indexed_papers.get(ref_id, {})
+        if not isinstance(indexed_meta, dict):
+            indexed_meta = {}
+        available_sections = indexed_meta.get("available_sections", [])
+        if not isinstance(available_sections, list):
+            available_sections = []
+        snapshot.append(
+            {
+                "ref_id": ref_id,
+                "title": ref.get("title", ""),
+                "year": ref.get("year"),
+                "abstract": ref.get("abstract") or "",
+                "source": str(indexed_meta.get("source", ref.get("source", "")) or ""),
+                "indexed": bool(indexed_meta.get("indexed", False)),
+                "available_sections": [
+                    str(section).strip()
+                    for section in available_sections
+                    if str(section).strip()
+                ],
+            }
+        )
+    return snapshot[:50]
+
+
 def write_subtasks(
     *,
     llm_client: Any,
@@ -96,16 +137,7 @@ def write_subtasks(
             prev_text = kept.get("output_text", "")
             continue
 
-        refs_snapshot = [
-            {
-                "ref_id": ref["ref_id"],
-                "title": ref.get("title", ""),
-                "year": ref.get("year"),
-                "abstract": ref.get("abstract") or "",
-            }
-            for ref in state.get("references", [])
-            if isinstance(ref, dict) and ref.get("ref_id")
-        ][:50]
+        refs_snapshot = _build_refs_snapshot(state=state)
 
         local_context: list[dict[str, Any]] = []
         if rag_index is not None:
@@ -123,6 +155,8 @@ def write_subtasks(
             "Do NOT include content that belongs to other subtasks. "
             "If a related topic is outside this subtask's scope, mention it briefly "
             "and note that it will be covered in a later section. "
+            "References marked source=local are author-provided core papers and should be prioritized when relevant. "
+            "References marked indexed=true include full-text section metadata that the writing agent can drill into. "
             "Include specific technical details, mathematical notation where appropriate, "
             "and reference concrete experimental results. "
             "Return JSON with keys: "

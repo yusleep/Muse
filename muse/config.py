@@ -27,6 +27,11 @@ class Settings:
     middleware_compaction_threshold: float = 0.9
     middleware_compaction_recent_tokens: int = 20_000
     middleware_context_window: int = 128_000
+    fetch_full_text: bool = False
+    llamaparse_api_key: str = ""
+    max_papers_to_index: int = 20
+    local_papers_dir: str = ""
+    local_priority: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +131,21 @@ def _snake_to_camel_dict(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _yaml_to_router_config(yaml_cfg: dict[str, Any]) -> dict[str, Any]:
     """Convert YAML auth/providers/routes into _ModelRouter dict format."""
     router: dict[str, Any] = {}
@@ -169,6 +189,19 @@ def _yaml_to_settings(
         kw["semantic_scholar_api_key"] = search.get("semantic_scholar_api_key") or None
         kw["openalex_email"] = search.get("openalex_email") or None
         kw["crossref_mailto"] = search.get("crossref_mailto") or None
+        if "fetch_full_text" in search:
+            kw["fetch_full_text"] = _coerce_bool(search.get("fetch_full_text"), default=False)
+        if "llamaparse_api_key" in search:
+            kw["llamaparse_api_key"] = str(search.get("llamaparse_api_key") or "")
+        if "max_papers_to_index" in search:
+            kw["max_papers_to_index"] = int(search.get("max_papers_to_index") or 20)
+        if "local_papers_dir" in search:
+            local_papers_dir = str(search.get("local_papers_dir") or "").strip()
+            kw["local_papers_dir"] = (
+                _resolve_config_path(local_papers_dir, config_dir) if local_papers_dir else ""
+            )
+        if "local_priority" in search:
+            kw["local_priority"] = _coerce_bool(search.get("local_priority"), default=True)
 
     # middleware section
     mw = yaml_cfg.get("middleware", {})

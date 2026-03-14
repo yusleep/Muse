@@ -75,6 +75,68 @@ _STAGE_INTERRUPT_META: dict[str, dict[str, Any]] = {
 }
 
 
+def _subtask_results_from_state(state: dict[str, Any]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+
+    direct_results = state.get("subtask_results", [])
+    if isinstance(direct_results, list):
+        results.extend(item for item in direct_results if isinstance(item, dict))
+
+    chapters = state.get("chapters", {})
+    if isinstance(chapters, dict):
+        for chapter_data in chapters.values():
+            if not isinstance(chapter_data, dict):
+                continue
+            chapter_results = chapter_data.get("subtask_results", [])
+            if isinstance(chapter_results, list):
+                results.extend(item for item in chapter_results if isinstance(item, dict))
+
+    return results
+
+
+def _build_self_assessment_notes(state: dict[str, Any]) -> list[dict[str, Any]]:
+    notes: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for subtask in _subtask_results_from_state(state):
+        subtask_id = str(subtask.get("subtask_id", "")).strip()
+        if not subtask_id:
+            continue
+
+        confidence_value = subtask.get("confidence", 0.5)
+        try:
+            confidence = float(confidence_value)
+        except (TypeError, ValueError):
+            confidence = 0.5
+
+        weak_spots = subtask.get("weak_spots", [])
+        if not isinstance(weak_spots, list):
+            weak_spots = []
+        needs_revision = bool(subtask.get("needs_revision", False))
+
+        if confidence >= 0.4 and not needs_revision:
+            continue
+
+        weak_text = ", ".join(
+            str(item).strip() for item in weak_spots[:3] if str(item).strip()
+        ) or "overall quality"
+        instruction = f"[自评标记] confidence={confidence:.2f}, 薄弱环节: {weak_text}"
+        dedupe_key = (subtask_id, instruction)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        notes.append(
+            {
+                "subtask_id": subtask_id,
+                "severity": 3,
+                "instruction": instruction,
+                "lens": "self_assessment",
+            }
+        )
+
+    return notes
+
+
 def build_chapter_review_node(services: Any):
     def chapter_review(state: dict[str, Any]) -> dict[str, Any]:
         llm = getattr(services, "llm", None)
@@ -103,6 +165,9 @@ def build_chapter_review_node(services: Any):
             packet_notes = packet.get("review_notes", [])
             if isinstance(packet_notes, list):
                 review_notes.extend(note for note in packet_notes if isinstance(note, dict))
+
+        auto_notes = _build_self_assessment_notes(state)
+        review_notes = review_notes + auto_notes
 
         return {
             "quality_scores": scores,
