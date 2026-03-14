@@ -11,11 +11,17 @@ from muse.graph.helpers.review_state import build_revision_instructions
 from muse.prompts.adaptive_review import adaptive_review_prompt
 from muse.prompts.chapter_review import chapter_review_prompt_for_lens
 from muse.prompts.global_review import global_review_prompt_for_lens
+from muse.prompts.layered_review import layered_review_prompt, layered_revision_prompt
 from muse.prompts.review_judge import JUDGE_SYSTEM
 from muse.prompts.reviewer_personas import persona_dimensions, reviewer_persona_prompt
 
 
 _REVIEW_LENSES = ["logic", "style", "citation", "structure"]
+_LAYER_SCORE_KEYS = {
+    "structural": ("logic", "structure", "balance"),
+    "content": ("citation", "coverage", "depth"),
+    "line": ("style", "term_consistency", "redundancy"),
+}
 _STAGE_INTERRUPT_META: dict[str, dict[str, Any]] = {
     "research": {
         "question": "References collected. How would you like to proceed?",
@@ -262,6 +268,21 @@ def _merge_persona_results(packets: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _layer_iteration_key(layer: str) -> str:
+    return f"{layer}_iterations"
+
+
+def _filter_scores_for_keys(scores: Any, allowed_keys: tuple[str, ...]) -> dict[str, int]:
+    filtered: dict[str, int] = {}
+    if not isinstance(scores, dict):
+        return filtered
+    allowed = set(allowed_keys)
+    for key, value in scores.items():
+        if key in allowed and isinstance(value, (int, float)):
+            filtered[key] = int(value)
+    return filtered
+
+
 def _run_classic_global_review(
     state: dict[str, Any],
     *,
@@ -378,6 +399,85 @@ def _run_persona_global_review(
         scores=scores,
         review_notes=review_notes,
     )
+
+
+def build_layered_review_node(services: Any, *, layer: str):
+    allowed_keys = _LAYER_SCORE_KEYS[layer]
+    iteration_key = _layer_iteration_key(layer)
+
+    def layered_review(state: dict[str, Any]) -> dict[str, Any]:
+        llm = getattr(services, "llm", None)
+        current_iterations = state.get(iteration_key, 0)
+        try:
+            current_iterations = max(int(current_iterations), 0)
+        except (TypeError, ValueError):
+            current_iterations = 0
+        current_review_iteration = state.get("review_iteration", 1)
+        try:
+            current_review_iteration = max(int(current_review_iteration), 1)
+        except (TypeError, ValueError):
+            current_review_iteration = 1
+
+        final_text = str(state.get("final_text", "") or "")
+        system, user = layered_review_prompt(layer, final_text)
+        try:
+            payload = llm.structured(system=system, user=user, route="review", max_tokens=1800) if llm is not None else {}
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        scores = _filter_scores_for_keys(payload.get("scores", {}), allowed_keys)
+        review_notes = _normalize_global_review_notes(
+            [
+                dict(note)
+                for note in payload.get("review_notes", [])
+                if isinstance(note, dict)
+            ]
+            if isinstance(payload.get("review_notes", []), list)
+            else []
+        )
+        for note in review_notes:
+            note.setdefault("lens", layer)
+        record = _build_review_record(
+            iteration=current_review_iteration,
+            scores=scores,
+            review_notes=review_notes,
+        )
+        record["layer"] = layer
+        return {
+            "quality_scores": scores,
+            "review_notes": review_notes,
+            iteration_key: current_iterations + 1,
+            "review_layer": layer,
+            "review_history": [record],
+            "review_iteration": current_review_iteration + 1,
+        }
+
+    return layered_review
+
+
+def build_global_revise_node(services: Any, *, layer: str):
+    def revise(state: dict[str, Any]) -> dict[str, Any]:
+        llm = getattr(services, "llm", None)
+        final_text = str(state.get("final_text", "") or "")
+        review_notes = state.get("review_notes", [])
+        if not isinstance(review_notes, list):
+            review_notes = []
+        if llm is None:
+            return {"final_text": final_text, "review_layer": layer}
+
+        system, user = layered_revision_prompt(layer, final_text, review_notes)
+        try:
+            payload = llm.structured(system=system, user=user, route="writing", max_tokens=2800)
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        revised_text = str(payload.get("final_text", "") or final_text)
+        return {"final_text": revised_text, "review_layer": layer}
+
+    return revise
 
 
 def build_chapter_review_node(services: Any):

@@ -13,6 +13,10 @@ class ThesisStateSchemaTests(unittest.TestCase):
         self.assertIn("review_notes", hints)
         self.assertIn("review_history", hints)
         self.assertIn("review_iteration", hints)
+        self.assertIn("structural_iterations", hints)
+        self.assertIn("content_iterations", hints)
+        self.assertIn("line_iterations", hints)
+        self.assertIn("review_layer", hints)
         self.assertIn("revision_instructions", hints)
 
     def test_new_state_contains_required_keys(self):

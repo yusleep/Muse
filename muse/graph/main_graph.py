@@ -24,6 +24,7 @@ from muse.graph.state import MuseState
 from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
 from muse.graph.subgraphs.citation import build_citation_subgraph_node
 from muse.graph.subgraphs.composition import build_composition_subgraph_node
+from muse.graph.subgraphs.review import build_global_review_subgraph_node
 from muse.middlewares import build_default_chain
 
 
@@ -89,6 +90,7 @@ def build_graph(
 ):
     settings = settings or _default_settings()
     services = services or _NullServices()
+    review_mode = str(getattr(settings, "review_mode", "classic") or "classic").strip().lower()
 
     builder = StateGraph(MuseState)
     builder.add_node(
@@ -123,7 +125,16 @@ def build_graph(
             services,
         ),
     )
-    builder.add_node("review_draft", build_interrupt_node("draft", auto_approve=auto_approve))
+    if review_mode != "classic":
+        builder.add_node(
+            "global_review",
+            _wrap(
+                build_global_review_subgraph_node(settings=settings, services=services),
+                "global_review",
+                settings,
+                services,
+            ),
+        )
     builder.add_node(
         "citation_subgraph",
         _wrap(
@@ -158,8 +169,11 @@ def build_graph(
     builder.add_edge("outline", "approve_outline")
     builder.add_conditional_edges("approve_outline", fan_out_chapters, ["chapter_subgraph"])
     builder.add_edge("chapter_subgraph", "merge_chapters")
-    builder.add_edge("merge_chapters", "review_draft")
-    builder.add_edge("review_draft", "citation_subgraph")
+    if review_mode == "classic":
+        builder.add_edge("merge_chapters", "citation_subgraph")
+    else:
+        builder.add_edge("merge_chapters", "global_review")
+        builder.add_edge("global_review", "citation_subgraph")
     builder.add_edge("citation_subgraph", "polish")
     builder.add_edge("polish", "composition_subgraph")
     builder.add_edge("composition_subgraph", "approve_final")

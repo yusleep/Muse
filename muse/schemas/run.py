@@ -24,6 +24,10 @@ class ThesisState(TypedDict):
     review_notes: list[dict[str, Any]]
     review_history: list[dict[str, Any]]
     review_iteration: int
+    structural_iterations: int
+    content_iterations: int
+    line_iterations: int
+    review_layer: str
     citation_uses: list[CitationUse]
     claim_text_by_id: dict[str, str]
     verified_citations: list[str]
@@ -87,6 +91,10 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "review_notes": [],
     "review_history": [],
     "review_iteration": 1,
+    "structural_iterations": 0,
+    "content_iterations": 0,
+    "line_iterations": 0,
+    "review_layer": "",
     "citation_uses": [],
     "claim_text_by_id": {},
     "verified_citations": [],
@@ -140,6 +148,10 @@ def new_thesis_state(
         review_notes=[],
         review_history=[],
         review_iteration=1,
+        structural_iterations=0,
+        content_iterations=0,
+        line_iterations=0,
+        review_layer="",
         citation_uses=[],
         claim_text_by_id={},
         verified_citations=[],

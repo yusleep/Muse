@@ -37,6 +37,10 @@ class MuseState(TypedDict, total=False):
     review_notes: Annotated[list[dict[str, Any]], operator.add]
     review_history: Annotated[list[dict[str, Any]], operator.add]
     review_iteration: int
+    structural_iterations: int
+    content_iterations: int
+    line_iterations: int
+    review_layer: str
     revision_instructions: Annotated[dict[str, str], _merge_dict]
     citation_uses: Annotated[list[dict[str, Any]], operator.add]
     citation_ledger: Annotated[dict[str, Any], _merge_dict]
