@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 
@@ -77,6 +78,35 @@ class GlobalReviewPromptTests(unittest.TestCase):
         self.assertIn("Still missing support for the transition paragraph.", system)
         self.assertIn("escalate the severity", system)
         self.assertIn('"text": "Updated thesis draft."', user)
+
+    def test_reviewer_persona_prompts_are_scoped_to_owned_dimensions(self):
+        from muse.prompts.reviewer_personas import reviewer_persona_prompt
+
+        logic_system, _ = reviewer_persona_prompt("logic", merged_text="Draft.")
+        citation_system, _ = reviewer_persona_prompt("citation", merged_text="Draft.")
+        readability_system, _ = reviewer_persona_prompt("readability", merged_text="Draft.")
+
+        self.assertIn("logic, structure, balance", logic_system)
+        self.assertIn("citation, coverage, depth", citation_system)
+        self.assertIn("style, term_consistency, redundancy", readability_system)
+        self.assertIn('"scores": {"logic":', logic_system)
+        self.assertIn('"scores": {"citation":', citation_system)
+        self.assertIn('"scores": {"style":', readability_system)
+
+    def test_review_judge_prompt_defines_unified_output_contract(self):
+        from muse.prompts.review_judge import JUDGE_SYSTEM
+
+        self.assertIn('"final_scores"', JUDGE_SYSTEM)
+        self.assertIn('"unified_notes"', JUDGE_SYSTEM)
+        self.assertIn('"conflicts_resolved"', JUDGE_SYSTEM)
+        payload = json.dumps(
+            [
+                {"persona": "logic", "result": {"scores": {"logic": 3}, "review_notes": []}},
+                {"persona": "citation", "result": {"scores": {"citation": 4}, "review_notes": []}},
+            ],
+            ensure_ascii=False,
+        )
+        self.assertIn('"persona": "logic"', payload)
 
 
 if __name__ == "__main__":

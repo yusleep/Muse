@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langgraph.types import interrupt
@@ -10,6 +11,8 @@ from muse.graph.helpers.review_state import build_revision_instructions
 from muse.prompts.adaptive_review import adaptive_review_prompt
 from muse.prompts.chapter_review import chapter_review_prompt_for_lens
 from muse.prompts.global_review import global_review_prompt_for_lens
+from muse.prompts.review_judge import JUDGE_SYSTEM
+from muse.prompts.reviewer_personas import persona_dimensions, reviewer_persona_prompt
 
 
 _REVIEW_LENSES = ["logic", "style", "citation", "structure"]
@@ -176,6 +179,207 @@ def _review_notes_summary(review_notes: list[dict[str, Any]]) -> str:
     return "; ".join(snippets)
 
 
+def _build_review_record(
+    *,
+    iteration: int,
+    scores: dict[str, int],
+    review_notes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "iteration": iteration,
+        "scores": dict(scores),
+        "notes_summary": _review_notes_summary(review_notes),
+        "note_count": len(review_notes),
+    }
+
+
+def _sanitize_persona_packet(persona: str, payload: dict[str, Any]) -> dict[str, Any]:
+    allowed_dimensions = set(persona_dimensions(persona))
+    raw_scores = payload.get("scores", {})
+    filtered_scores: dict[str, int] = {}
+    if isinstance(raw_scores, dict):
+        for key, value in raw_scores.items():
+            if key in allowed_dimensions and isinstance(value, (int, float)):
+                filtered_scores[key] = int(value)
+
+    raw_notes = payload.get("review_notes", [])
+    filtered_notes: list[dict[str, Any]] = []
+    if isinstance(raw_notes, list):
+        for note in raw_notes:
+            if not isinstance(note, dict):
+                continue
+            item = dict(note)
+            item.setdefault("lens", persona)
+            item["is_recurring"] = bool(item.get("is_recurring", False))
+            filtered_notes.append(item)
+
+    return {"scores": filtered_scores, "review_notes": filtered_notes}
+
+
+def _merge_persona_results(packets: list[dict[str, Any]]) -> dict[str, Any]:
+    final_scores: dict[str, int] = {}
+    unified_notes: list[dict[str, Any]] = []
+    persona_floor_scores: dict[str, int] = {}
+
+    for packet in packets:
+        persona = str(packet.get("persona", "")).strip()
+        result = packet.get("result", {})
+        if not isinstance(result, dict):
+            continue
+        scores = result.get("scores", {})
+        if isinstance(scores, dict):
+            numeric_scores = []
+            for key, value in scores.items():
+                if isinstance(value, (int, float)):
+                    final_scores[key] = int(value)
+                    numeric_scores.append(int(value))
+            if persona and numeric_scores:
+                persona_floor_scores[persona] = min(numeric_scores)
+        notes = result.get("review_notes", [])
+        if isinstance(notes, list):
+            unified_notes.extend(note for note in notes if isinstance(note, dict))
+
+    unified_notes = _normalize_global_review_notes(unified_notes)
+    unified_notes.sort(key=lambda note: int(note.get("severity", 0)), reverse=True)
+
+    conflicts_resolved: list[dict[str, Any]] = []
+    if persona_floor_scores:
+        min_score = min(persona_floor_scores.values())
+        max_score = max(persona_floor_scores.values())
+        if max_score - min_score > 2:
+            conflicts_resolved.append(
+                {
+                    "topic": "reviewer_strictness",
+                    "scores": dict(persona_floor_scores),
+                    "ruling": "Preserved the stricter persona signal while keeping the merged notes ordered by severity.",
+                }
+            )
+
+    return {
+        "final_scores": final_scores,
+        "unified_notes": unified_notes,
+        "conflicts_resolved": conflicts_resolved,
+    }
+
+
+def _run_classic_global_review(
+    state: dict[str, Any],
+    *,
+    llm: Any,
+) -> tuple[dict[str, int], list[dict[str, Any]], dict[str, Any]]:
+    merged_text = str(state.get("final_text", "") or "")
+    review_history = state.get("review_history", [])
+    if not isinstance(review_history, list):
+        review_history = []
+
+    iteration_value = state.get("review_iteration", 1)
+    try:
+        iteration = max(int(iteration_value), 1)
+    except (TypeError, ValueError):
+        iteration = 1
+
+    packets: list[dict[str, Any]] = []
+    if llm is not None:
+        for lens in _REVIEW_LENSES:
+            if iteration > 1 and review_history:
+                system, user = adaptive_review_prompt(
+                    merged_text=merged_text,
+                    lens=lens,
+                    review_history=review_history,
+                    iteration=iteration,
+                )
+            else:
+                system, user = global_review_prompt_for_lens(
+                    merged_text=merged_text,
+                    lens=lens,
+                )
+            try:
+                payload = llm.structured(system=system, user=user, route="review", max_tokens=1800)
+            except Exception:
+                payload = {}
+            if isinstance(payload, dict):
+                packets.append(payload)
+
+    scores, review_notes = _merge_review_packets(packets)
+    review_notes = _normalize_global_review_notes(review_notes)
+    return scores, review_notes, _build_review_record(
+        iteration=iteration,
+        scores=scores,
+        review_notes=review_notes,
+    )
+
+
+def _run_persona_global_review(
+    state: dict[str, Any],
+    *,
+    llm: Any,
+) -> tuple[dict[str, int], list[dict[str, Any]], dict[str, Any]]:
+    merged_text = str(state.get("final_text", "") or "")
+    review_history = state.get("review_history", [])
+    if not isinstance(review_history, list):
+        review_history = []
+
+    iteration_value = state.get("review_iteration", 1)
+    try:
+        iteration = max(int(iteration_value), 1)
+    except (TypeError, ValueError):
+        iteration = 1
+
+    persona_packets: list[dict[str, Any]] = []
+    if llm is not None:
+        for persona in ("logic", "citation", "readability"):
+            system, user = reviewer_persona_prompt(
+                persona,
+                merged_text=merged_text,
+                review_history=review_history,
+                iteration=iteration,
+            )
+            try:
+                payload = llm.structured(system=system, user=user, route="review", max_tokens=2000)
+            except Exception:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            persona_packets.append(
+                {
+                    "persona": persona,
+                    "result": _sanitize_persona_packet(persona, payload),
+                }
+            )
+
+    judge_result = _merge_persona_results(persona_packets)
+    if llm is not None:
+        try:
+            candidate = llm.structured(
+                system=JUDGE_SYSTEM,
+                user=json.dumps(persona_packets, ensure_ascii=False),
+                route="review_judge",
+                max_tokens=2000,
+            )
+        except Exception:
+            candidate = None
+        if isinstance(candidate, dict):
+            judge_result = candidate
+
+    raw_scores = judge_result.get("final_scores", {})
+    scores = {
+        key: int(value)
+        for key, value in raw_scores.items()
+        if isinstance(value, (int, float))
+    } if isinstance(raw_scores, dict) else {}
+    raw_notes = judge_result.get("unified_notes", [])
+    review_notes = _normalize_global_review_notes(
+        [note for note in raw_notes if isinstance(note, dict)]
+        if isinstance(raw_notes, list)
+        else []
+    )
+    return scores, review_notes, _build_review_record(
+        iteration=iteration,
+        scores=scores,
+        review_notes=review_notes,
+    )
+
+
 def build_chapter_review_node(services: Any):
     def chapter_review(state: dict[str, Any]) -> dict[str, Any]:
         llm = getattr(services, "llm", None)
@@ -217,50 +421,25 @@ def build_chapter_review_node(services: Any):
     return chapter_review
 
 
-def build_global_review_node(services: Any):
+def build_global_review_node(services: Any, *, mode: str = "classic"):
     def global_review(state: dict[str, Any]) -> dict[str, Any]:
         llm = getattr(services, "llm", None)
-        merged_text = str(state.get("final_text", "") or "")
-        review_history = state.get("review_history", [])
-        if not isinstance(review_history, list):
-            review_history = []
-
         iteration_value = state.get("review_iteration", 1)
         try:
             iteration = max(int(iteration_value), 1)
         except (TypeError, ValueError):
             iteration = 1
 
-        packets: list[dict[str, Any]] = []
-        if llm is not None:
-            for lens in _REVIEW_LENSES:
-                if iteration > 1 and review_history:
-                    system, user = adaptive_review_prompt(
-                        merged_text=merged_text,
-                        lens=lens,
-                        review_history=review_history,
-                        iteration=iteration,
-                    )
-                else:
-                    system, user = global_review_prompt_for_lens(
-                        merged_text=merged_text,
-                        lens=lens,
-                    )
-                try:
-                    payload = llm.structured(system=system, user=user, route="review", max_tokens=1800)
-                except Exception:
-                    payload = {}
-                if isinstance(payload, dict):
-                    packets.append(payload)
-
-        scores, review_notes = _merge_review_packets(packets)
-        review_notes = _normalize_global_review_notes(review_notes)
-        current_review_record = {
-            "iteration": iteration,
-            "scores": dict(scores),
-            "notes_summary": _review_notes_summary(review_notes),
-            "note_count": len(review_notes),
-        }
+        if mode == "persona":
+            scores, review_notes, current_review_record = _run_persona_global_review(
+                state,
+                llm=llm,
+            )
+        else:
+            scores, review_notes, current_review_record = _run_classic_global_review(
+                state,
+                llm=llm,
+            )
         return {
             "quality_scores": scores,
             "review_notes": review_notes,
