@@ -9,7 +9,10 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
-from muse.graph.helpers.draft_support import _build_refs_snapshot
+from muse.graph.helpers.draft_support import (
+    _build_refs_snapshot,
+    _consistency_context_from_state,
+)
 from muse.tools._context import AgentRuntimeContext
 from muse.tools.orchestration import append_partial_subtask_result
 
@@ -162,6 +165,9 @@ def write_section(
         "previous_subsection": previous_subsection,
         "revision_instruction": revision_instruction or None,
     }
+    consistency_context = _consistency_context_from_state(tool_state)
+    if consistency_context is not None:
+        user_payload["consistency_context"] = consistency_context
     user = json.dumps(user_payload, ensure_ascii=False)
 
     llm_call_failed = False

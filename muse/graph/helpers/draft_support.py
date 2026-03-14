@@ -121,6 +121,19 @@ def _build_refs_snapshot(
     return snapshot[:50]
 
 
+def _consistency_context_from_state(state: dict[str, Any]) -> dict[str, Any] | None:
+    from muse.graph.helpers.memory_keeper import ConsistencyStore
+
+    store = ConsistencyStore.from_dict(state.get("consistency_data", {}))
+    context = store.get_context_for_draft()
+    if not any(context.get(key) for key in ("glossary", "citation_counts", "notation", "chapter_summaries")):
+        return None
+    context["instruction"] = (
+        "Keep terminology, notation, and citation choices consistent with earlier chapters."
+    )
+    return context
+
+
 def write_subtasks(
     *,
     llm_client: Any,
@@ -182,6 +195,9 @@ def write_subtasks(
             "previous_subsection": prev_text,
             "revision_instruction": revision_instructions.get(sid),
         }
+        consistency_context = _consistency_context_from_state(state)
+        if consistency_context is not None:
+            user_payload["consistency_context"] = consistency_context
         if local_context:
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)

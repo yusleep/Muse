@@ -318,6 +318,56 @@ class WriteSectionToolTests(unittest.TestCase):
         self.assertEqual(partial_results[0]["title"], "Background")
         self.assertEqual(partial_results[0]["confidence"], 0.3)
         self.assertTrue(partial_results[0]["needs_revision"])
+
+    def test_write_section_injects_consistency_context_from_runtime_state(self):
+        from muse.tools._context import set_services
+        from muse.tools._context import set_state
+        from muse.tools.orchestration import clear_partial_subtask_results
+        from muse.tools.writing import write_section
+
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "Generated section text about the topic.",
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.7, "weak_spots": [], "needs_revision": False},
+                }
+
+        class _Services:
+            llm = _CaptureLLM()
+
+        set_state(
+            {
+                "consistency_data": {
+                    "glossary": {"Agent Runtime": "智能体运行时"},
+                    "citation_counts": {"@smith2024": 2},
+                    "notation": {},
+                    "chapter_summaries": {"ch_01": "Prior chapter summary."},
+                }
+            }
+        )
+        set_services(_Services())
+        write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        consistency = seen_payloads[0]["consistency_context"]
+        self.assertEqual(consistency["glossary"]["Agent Runtime"], "智能体运行时")
+        self.assertEqual(consistency["citation_counts"]["@smith2024"], 2)
         clear_partial_subtask_results()
 
     def test_revise_section_returns_revised_text(self):

@@ -424,6 +424,48 @@ class TestWriteSubtasksWordCountRetry(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(results[0]["actual_words"], 950)
 
+
+class TestWriteSubtasksConsistencyContext(unittest.TestCase):
+    def test_write_subtasks_injects_consistency_context(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            consistency_data={
+                "glossary": {"Agent Runtime": "智能体运行时"},
+                "citation_counts": {"@smith2024": 2},
+                "notation": {},
+                "chapter_summaries": {"ch_01": "Prior chapter summary."},
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Consistency", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        consistency = seen_payloads[0]["consistency_context"]
+        self.assertEqual(consistency["glossary"]["Agent Runtime"], "智能体运行时")
+        self.assertEqual(consistency["citation_counts"]["@smith2024"], 2)
+        self.assertEqual(consistency["chapter_summaries"]["ch_01"], "Prior chapter summary.")
+
     def test_retry_result_must_be_longer_to_replace_original(self):
         calls = []
 

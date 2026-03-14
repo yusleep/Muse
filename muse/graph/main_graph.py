@@ -21,7 +21,11 @@ from muse.graph.nodes import (
     build_coherence_check_node,
     build_search_node,
 )
-from muse.graph.nodes.draft import fan_out_chapters
+from muse.graph.nodes.draft import (
+    build_prepare_next_chapter_node,
+    build_update_cross_chapter_state_node,
+    next_chapter_route,
+)
 from muse.graph.state import MuseState
 from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
 from muse.graph.subgraphs.citation import build_citation_subgraph_node
@@ -137,6 +141,24 @@ def build_graph(
         ),
     )
     builder.add_node(
+        "prepare_next_chapter",
+        _wrap(
+            build_prepare_next_chapter_node(),
+            "prepare_next_chapter",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "update_cross_chapter_state",
+        _wrap(
+            build_update_cross_chapter_state_node(),
+            "update_cross_chapter_state",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "merge_chapters",
         _wrap(
             build_merge_chapters_node(settings, services),
@@ -205,8 +227,14 @@ def build_graph(
     builder.add_edge("search", "review_refs")
     builder.add_edge("review_refs", "outline")
     builder.add_edge("outline", "approve_outline")
-    builder.add_conditional_edges("approve_outline", fan_out_chapters, ["chapter_subgraph"])
-    builder.add_edge("chapter_subgraph", "merge_chapters")
+    builder.add_edge("approve_outline", "prepare_next_chapter")
+    builder.add_conditional_edges(
+        "prepare_next_chapter",
+        next_chapter_route,
+        {"chapter_subgraph": "chapter_subgraph", "merge_chapters": "merge_chapters"},
+    )
+    builder.add_edge("chapter_subgraph", "update_cross_chapter_state")
+    builder.add_edge("update_cross_chapter_state", "prepare_next_chapter")
     if review_mode == "classic":
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "citation_subgraph")

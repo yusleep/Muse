@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：3/5 phases, 19/28 steps
+- **总进度**：3/5 phases, 20/28 steps
 - **当前 Wave**：Wave 4
-- **下一步**：Phase 4 Step 4.2
+- **下一步**：Phase 4 Step 4.3
 
 ---
 
@@ -47,9 +47,9 @@
 
 ## Wave 4 — Cross-Chapter Intelligence
 
-### Phase 4: Cross-Chapter Intelligence (1/5)
+### Phase 4: Cross-Chapter Intelligence (2/5)
 - [x] Step 4.1: Citation 硬门禁 (~80 行)
-- [ ] Step 4.2: Memory Keeper — 跨章术语/引用一致性追踪 (~120 行)
+- [x] Step 4.2: Memory Keeper — 跨章术语/引用一致性追踪 (~120 行)
 - [ ] Step 4.3: Persistent Reflection Bank — 修订经验积累 (~130 行)
 - [ ] Step 4.4: Reference Briefs — 章节级参考文献分析 (~150 行)
 - [ ] Step 4.5: Argument Planning — 预写结构化论证规划 (~100 行)
@@ -83,3 +83,4 @@
 - 2026-03-14: 完成 Phase 3 Step 3.4，细化 writing/review 路由并接入 review.mode 配置
 - 2026-03-14: 完成 Phase 3 Step 3.5，在 merge 后新增 coherence_check 节点并把严重连贯性问题注入 review_notes
 - 2026-03-14: 完成 Phase 4 Step 4.1，在 citation_subgraph 后新增 citation_repair 硬门禁与一次性修复路由
+- 2026-03-14: 完成 Phase 4 Step 4.2，将主图改为顺序章节执行，新增 ConsistencyStore 跨章术语/引用记忆，并把 consistency_context 注入写作路径
