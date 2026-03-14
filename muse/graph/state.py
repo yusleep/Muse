@@ -59,7 +59,7 @@ class MuseState(TypedDict, total=False):
 
     verified_citations: list[str]
     flagged_citations: list[dict[str, Any]]
-    _citation_repair_attempted: bool
+    citation_repair_attempted: bool
 
     paper_package: Annotated[dict[str, Any], _merge_dict]
     final_text: str

@@ -48,7 +48,7 @@ def _citation_quality_route(state: dict[str, Any]) -> str:
         return "polish"
 
     flagged_ratio = len(flagged) / total
-    if flagged_ratio > 0.2 and not bool(state.get("_citation_repair_attempted", False)):
+    if flagged_ratio > 0.2 and not bool(state.get("citation_repair_attempted", False)):
         return "citation_repair"
     return "polish"
 

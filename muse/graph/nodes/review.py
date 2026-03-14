@@ -185,10 +185,17 @@ def _review_notes_summary(review_notes: list[dict[str, Any]]) -> str:
     return "; ".join(snippets)
 
 
+def _safe_severity(note: dict[str, Any]) -> int:
+    try:
+        return int(note.get("severity", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _top_review_instructions(review_notes: list[dict[str, Any]], limit: int = 3) -> list[str]:
     ranked_notes = sorted(
         (note for note in review_notes if isinstance(note, dict)),
-        key=lambda note: int(note.get("severity", 0)),
+        key=_safe_severity,
         reverse=True,
     )
     instructions: list[str] = []

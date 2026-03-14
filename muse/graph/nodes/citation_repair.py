@@ -39,7 +39,7 @@ def build_citation_repair_node():
     def citation_repair(state: dict[str, Any]) -> dict[str, Any]:
         flagged = state.get("flagged_citations", [])
         if not isinstance(flagged, list) or not flagged:
-            return {"_citation_repair_attempted": True}
+            return {"citation_repair_attempted": True}
 
         flagged_keys = {
             str(entry.get("cite_key", "")).strip()
@@ -47,7 +47,7 @@ def build_citation_repair_node():
             if isinstance(entry, dict) and str(entry.get("cite_key", "")).strip()
         }
         if not flagged_keys:
-            return {"_citation_repair_attempted": True}
+            return {"citation_repair_attempted": True}
 
         repaired_chapters: dict[str, dict[str, Any]] = {}
         chapters = state.get("chapters", {})
@@ -77,7 +77,7 @@ def build_citation_repair_node():
             "chapters": repaired_chapters,
             "final_text": _remove_citations(str(state.get("final_text", "")), flagged_keys),
             "citation_uses": filtered_uses,
-            "_citation_repair_attempted": True,
+            "citation_repair_attempted": True,
         }
 
     return citation_repair

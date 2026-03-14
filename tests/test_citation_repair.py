@@ -41,7 +41,7 @@ class CitationRepairNodeTests(unittest.TestCase):
             }
         )
 
-        self.assertTrue(result["_citation_repair_attempted"])
+        self.assertTrue(result["citation_repair_attempted"])
         self.assertNotIn("@bad2024", result["chapters"]["ch_01"]["merged_text"])
         self.assertNotIn("@bad2024", result["final_text"])
         self.assertEqual(result["citation_uses"], [{"cite_key": "@keep2024", "claim_id": "c2"}])
@@ -53,7 +53,7 @@ class CitationRepairNodeTests(unittest.TestCase):
 
         result = node({"flagged_citations": []})
 
-        self.assertEqual(result, {"_citation_repair_attempted": True})
+        self.assertEqual(result, {"citation_repair_attempted": True})
 
 
 class CitationQualityRouteTests(unittest.TestCase):
@@ -76,7 +76,7 @@ class CitationQualityRouteTests(unittest.TestCase):
             {
                 "verified_citations": ["@a"],
                 "flagged_citations": [{"cite_key": "@x"}],
-                "_citation_repair_attempted": True,
+                "citation_repair_attempted": True,
             }
         )
 

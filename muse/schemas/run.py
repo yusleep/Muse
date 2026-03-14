@@ -37,7 +37,7 @@ class ThesisState(TypedDict):
     claim_text_by_id: dict[str, str]
     verified_citations: list[str]
     flagged_citations: list[FlaggedCitation]
-    _citation_repair_attempted: bool
+    citation_repair_attempted: bool
     terminology_glossary: dict[str, str]
     thesis_summary: str
     polish_notes: list[str]
@@ -77,7 +77,7 @@ _REQUIRED_KEYS = {
     "claim_text_by_id",
     "verified_citations",
     "flagged_citations",
-    "_citation_repair_attempted",
+    "citation_repair_attempted",
     "terminology_glossary",
     "thesis_summary",
     "polish_notes",
@@ -115,7 +115,7 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "claim_text_by_id": {},
     "verified_citations": [],
     "flagged_citations": [],
-    "_citation_repair_attempted": False,
+    "citation_repair_attempted": False,
     "terminology_glossary": {},
     "thesis_summary": "",
     "polish_notes": [],
@@ -178,7 +178,7 @@ def new_thesis_state(
         claim_text_by_id={},
         verified_citations=[],
         flagged_citations=[],
-        _citation_repair_attempted=False,
+        citation_repair_attempted=False,
         terminology_glossary={},
         thesis_summary="",
         polish_notes=[],
