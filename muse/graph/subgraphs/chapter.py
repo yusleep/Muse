@@ -7,7 +7,7 @@ import logging
 from typing import Annotated, Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
@@ -226,17 +226,68 @@ def _partial_subtask_result(
     }
 
 
+def _call_recovery_writer(
+    writer: Any,
+    *,
+    system: str,
+    user: str,
+) -> dict[str, Any]:
+    if writer is None:
+        raise RuntimeError("No structured writing client available for partial recovery.")
+
+    if hasattr(writer, "structured"):
+        return writer.structured(
+            system=system,
+            user=user,
+            route="writing",
+            max_tokens=2800,
+        )
+
+    llm_client = getattr(writer, "llm_client", None)
+    if llm_client is not None and hasattr(llm_client, "structured"):
+        return llm_client.structured(
+            system=system,
+            user=user,
+            route="writing",
+            max_tokens=2800,
+        )
+
+    if isinstance(writer, BaseChatModel) or hasattr(writer, "invoke"):
+        message = writer.invoke(
+            [
+                SystemMessage(content=system),
+                HumanMessage(content=user),
+            ]
+        )
+        content = getattr(message, "content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        try:
+            parsed = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return {"text": content, "citations_used": [], "key_claims": []}
+        if isinstance(parsed, dict):
+            return parsed
+        return {"text": content, "citations_used": [], "key_claims": []}
+
+    raise RuntimeError("No structured writing client available for partial recovery.")
+
+
+def _resolve_recovery_writer(*, services: Any, settings: Any) -> Any:
+    services_llm = getattr(services, "llm", None) if services is not None else None
+    if services_llm is not None:
+        return services_llm
+    return _create_react_model(settings=settings, services=services)
+
+
 def _write_single_subtask(
     *,
-    llm_client: Any,
+    writer: Any,
     state: dict[str, Any],
     chapter_plan: dict[str, Any],
     subtask: dict[str, Any],
     existing_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if llm_client is None or not hasattr(llm_client, "structured"):
-        raise RuntimeError("No structured writing client available for partial recovery.")
-
     references = state.get("references", [])
     if not isinstance(references, list):
         references = []
@@ -286,11 +337,10 @@ def _write_single_subtask(
         "previous_subsection": previous_text[-1000:] if previous_text else "",
         "revision_instruction": "Partial recovery mode: complete only this missing subtask.",
     }
-    output = llm_client.structured(
+    output = _call_recovery_writer(
+        writer,
         system=system,
         user=json.dumps(user_payload, ensure_ascii=False),
-        route="writing",
-        max_tokens=2800,
     )
     if isinstance(output, str):
         output = {"text": output, "citations_used": [], "key_claims": []}
@@ -527,12 +577,12 @@ def build_chapter_subgraph_node(*, services: Any, settings: Any = None):
                 len(missing_subtasks),
             )
 
-            llm_client = getattr(services, "llm", None)
+            recovery_writer = _resolve_recovery_writer(services=services, settings=settings)
             for subtask in missing_subtasks:
                 try:
                     recovered_results.append(
                         _write_single_subtask(
-                            llm_client=llm_client,
+                            writer=recovery_writer,
                             state=state,
                             chapter_plan=chapter_plan,
                             subtask=subtask,

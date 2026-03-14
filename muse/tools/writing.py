@@ -23,6 +23,68 @@ def _services_from_runtime(runtime: MuseToolRuntime | None) -> Any:
     return services if services is not None else get_services()
 
 
+def _normalized_partial_output(output: Any) -> dict[str, Any] | None:
+    if isinstance(output, dict):
+        return dict(output)
+    if isinstance(output, str):
+        try:
+            parsed = json.loads(output)
+        except (json.JSONDecodeError, TypeError):
+            return {"text": output, "citations_used": [], "key_claims": []}
+        if isinstance(parsed, dict):
+            return parsed
+        return {"text": output, "citations_used": [], "key_claims": []}
+    return None
+
+
+def _append_partial_result(
+    *,
+    subtask_id: str,
+    subtask_title: str,
+    target_words: int,
+    output: dict[str, Any],
+    allowed_ref_ids: set[str],
+) -> None:
+    text = str(output.get("text", "")).strip()
+    if not text:
+        return
+
+    citations_used = output.get("citations_used", [])
+    if not isinstance(citations_used, list):
+        citations_used = []
+    key_claims = output.get("key_claims", [])
+    if not isinstance(key_claims, list):
+        key_claims = []
+    assessment = output.get("self_assessment", {})
+    if not isinstance(assessment, dict):
+        assessment = {}
+
+    append_partial_subtask_result(
+        {
+            "subtask_id": str(subtask_id),
+            "title": str(subtask_title),
+            "target_words": int(target_words),
+            "output_text": text,
+            "actual_words": len(text.split()),
+            "citations_used": [
+                str(cite_key).strip()
+                for cite_key in citations_used
+                if str(cite_key).strip() in allowed_ref_ids
+            ],
+            "key_claims": [str(claim).strip() for claim in key_claims if str(claim).strip()],
+            "transition_out": str(output.get("transition_out", "")),
+            "glossary_additions": output.get("glossary_additions", {})
+            if isinstance(output.get("glossary_additions", {}), dict)
+            else {},
+            "confidence": 0.3,
+            "weak_spots": assessment.get("weak_spots", [])
+            if isinstance(assessment.get("weak_spots", []), list)
+            else [],
+            "needs_revision": True,
+        }
+    )
+
+
 @tool
 def write_section(
     chapter_title: str,
@@ -97,23 +159,34 @@ def write_section(
     }
     user = json.dumps(user_payload, ensure_ascii=False)
 
+    llm_call_failed = False
     try:
         output = llm.structured(system=system, user=user, route="writing", max_tokens=2800)
     except Exception:  # noqa: BLE001
+        llm_call_failed = True
         output = {
             "text": f"[{chapter_title}] {subtask_title}\n\n(LLM call failed.)",
             "citations_used": [],
             "key_claims": [],
         }
 
+    allowed_set = {ref["ref_id"] for ref in refs_snapshot}
     if isinstance(output, str):
+        normalized = _normalized_partial_output(output)
+        if normalized is not None and not llm_call_failed:
+            _append_partial_result(
+                subtask_id=subtask_id,
+                subtask_title=subtask_title,
+                target_words=target_words,
+                output=normalized,
+                allowed_ref_ids=allowed_set,
+            )
         return output
 
     if isinstance(output, dict):
         citations_used = output.get("citations_used", [])
         if not isinstance(citations_used, list):
             citations_used = []
-        allowed_set = {ref["ref_id"] for ref in refs_snapshot}
         hallucinated = [str(c).strip() for c in citations_used if str(c).strip() not in allowed_set]
         if hallucinated:
             _log.warning(
@@ -123,33 +196,13 @@ def write_section(
                 hallucinated[:5],
             )
         output["citations_used"] = [str(c).strip() for c in citations_used if str(c).strip() in allowed_set]
-        text = str(output.get("text", "")).strip()
-        key_claims = output.get("key_claims", [])
-        if not isinstance(key_claims, list):
-            key_claims = []
-        assessment = output.get("self_assessment", {})
-        if not isinstance(assessment, dict):
-            assessment = {}
-        if text:
-            append_partial_subtask_result(
-                {
-                    "subtask_id": str(subtask_id),
-                    "title": str(subtask_title),
-                    "target_words": int(target_words),
-                    "output_text": text,
-                    "actual_words": len(text.split()),
-                    "citations_used": output["citations_used"],
-                    "key_claims": [str(claim).strip() for claim in key_claims if str(claim).strip()],
-                    "transition_out": str(output.get("transition_out", "")),
-                    "glossary_additions": output.get("glossary_additions", {})
-                    if isinstance(output.get("glossary_additions", {}), dict)
-                    else {},
-                    "confidence": 0.3,
-                    "weak_spots": assessment.get("weak_spots", [])
-                    if isinstance(assessment.get("weak_spots", []), list)
-                    else [],
-                    "needs_revision": True,
-                }
+        if not llm_call_failed:
+            _append_partial_result(
+                subtask_id=subtask_id,
+                subtask_title=subtask_title,
+                target_words=target_words,
+                output=output,
+                allowed_ref_ids=allowed_set,
             )
 
     return json.dumps(output, ensure_ascii=False)

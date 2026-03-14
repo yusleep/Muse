@@ -87,6 +87,10 @@ class WriteSectionToolTests(unittest.TestCase):
 
     def test_write_section_does_not_double_serialize_string_output(self):
         from muse.tools._context import set_services
+        from muse.tools.orchestration import (
+            clear_partial_subtask_results,
+            get_partial_subtask_results,
+        )
         from muse.tools.writing import write_section
 
         class _StringLLM:
@@ -97,6 +101,7 @@ class WriteSectionToolTests(unittest.TestCase):
         class _Services:
             llm = _StringLLM()
 
+        clear_partial_subtask_results()
         set_services(_Services())
         result = write_section.func(
             chapter_title="Introduction",
@@ -113,6 +118,73 @@ class WriteSectionToolTests(unittest.TestCase):
             result,
             '{"text":"already serialized","citations_used":["@smith2024"],"key_claims":[]}',
         )
+        self.assertEqual(get_partial_subtask_results()[0]["output_text"], "already serialized")
+
+    def test_write_section_accumulates_plain_text_success_output(self):
+        from muse.tools._context import set_services
+        from muse.tools.orchestration import (
+            clear_partial_subtask_results,
+            get_partial_subtask_results,
+        )
+        from muse.tools.writing import write_section
+
+        class _PlainTextLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, user, route, max_tokens
+                return "Plain text subsection."
+
+        class _Services:
+            llm = _PlainTextLLM()
+
+        clear_partial_subtask_results()
+        set_services(_Services())
+        result = write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        partial_results = get_partial_subtask_results()
+        self.assertEqual(result, "Plain text subsection.")
+        self.assertEqual(len(partial_results), 1)
+        self.assertEqual(partial_results[0]["output_text"], "Plain text subsection.")
+
+    def test_write_section_does_not_accumulate_failed_placeholder_output(self):
+        from muse.tools._context import set_services
+        from muse.tools.orchestration import (
+            clear_partial_subtask_results,
+            get_partial_subtask_results,
+        )
+        from muse.tools.writing import write_section
+
+        class _FailingLLM:
+            def structured(self, *, system, user, route="default", max_tokens=2500):
+                del system, user, route, max_tokens
+                raise RuntimeError("boom")
+
+        class _Services:
+            llm = _FailingLLM()
+
+        clear_partial_subtask_results()
+        set_services(_Services())
+        result = write_section.func(
+            chapter_title="Introduction",
+            subtask_id="sub_01",
+            subtask_title="Background",
+            target_words=1200,
+            topic="LangGraph thesis automation",
+            language="zh",
+            references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+            runtime=None,
+        )
+
+        self.assertIn("LLM call failed", result)
+        self.assertEqual(get_partial_subtask_results(), [])
 
     def test_write_section_prompt_includes_scope_guard(self):
         from muse.tools._context import set_services

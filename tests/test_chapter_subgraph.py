@@ -1,5 +1,6 @@
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -179,6 +180,28 @@ class _CrashNoProgressAgent:
     def invoke(self, agent_input, config, **kwargs):
         del agent_input, config, kwargs
         raise RuntimeError("hard failure")
+
+
+class _ManualPartialThenCrashAgent:
+    def invoke(self, agent_input, config, **kwargs):
+        del agent_input, config, kwargs
+        from muse.tools.orchestration import append_partial_subtask_result
+
+        append_partial_subtask_result(
+            {
+                "subtask_id": "sub_01",
+                "title": "Background",
+                "target_words": 500,
+                "output_text": "Background generated content.",
+                "actual_words": 3,
+                "citations_used": ["@smith2024graph"],
+                "key_claims": ["Background claim."],
+                "confidence": 0.3,
+                "weak_spots": ["transition"],
+                "needs_revision": True,
+            }
+        )
+        raise RuntimeError("boom after partial write")
 
 
 class ChapterSubgraphTests(unittest.TestCase):
@@ -399,6 +422,56 @@ class ChapterSubgraphTests(unittest.TestCase):
         )
 
         self.assertEqual(get_partial_subtask_results(), [])
+
+    def test_chapter_subgraph_recovers_missing_subtasks_from_settings_backed_writer(self):
+        from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
+
+        services = SimpleNamespace(
+            llm=None,
+            rag_index=None,
+            search=None,
+            subagent_executor=None,
+        )
+
+        with patch(
+            "muse.graph.subgraphs.chapter._build_react_chapter_agent",
+            return_value=_ManualPartialThenCrashAgent(),
+        ), patch(
+            "muse.graph.subgraphs.chapter._create_react_model",
+            return_value=SimpleNamespace(llm_client=_RecoveryLLM()),
+        ):
+            node_fn = build_chapter_subgraph_node(services=services, settings=object())
+            result = node_fn(
+                {
+                    "chapter_plan": {
+                        "chapter_id": "ch_01",
+                        "chapter_title": "Introduction",
+                        "subtask_plan": [
+                            {"subtask_id": "sub_01", "title": "Background", "target_words": 500},
+                            {"subtask_id": "sub_02", "title": "Methods", "target_words": 500},
+                        ],
+                    },
+                    "references": [{"ref_id": "@smith2024graph", "title": "Graph Systems", "year": 2024}],
+                    "topic": "Test",
+                    "language": "zh",
+                    "subtask_results": [],
+                    "merged_text": "",
+                    "quality_scores": {},
+                    "review_notes": [],
+                    "revision_instructions": {},
+                    "iteration": 0,
+                    "max_iterations": 1,
+                    "citation_uses": [],
+                    "claim_text_by_id": {},
+                }
+            )
+
+        chapter = result["chapters"]["ch_01"]
+        self.assertEqual(
+            [item["subtask_id"] for item in chapter["subtask_results"]],
+            ["sub_01", "sub_02"],
+        )
+        self.assertIn("Methods generated content.", chapter["merged_text"])
 
 
 if __name__ == "__main__":
