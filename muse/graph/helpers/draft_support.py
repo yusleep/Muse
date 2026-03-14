@@ -134,6 +134,13 @@ def _consistency_context_from_state(state: dict[str, Any]) -> dict[str, Any] | N
     return context
 
 
+def _reflection_tips_from_state(state: dict[str, Any]) -> list[str]:
+    from muse.graph.helpers.reflection_bank import ReflectionBank
+
+    bank = ReflectionBank.from_dict(state.get("reflection_data", {}))
+    return bank.get_writing_tips(max_tips=3)
+
+
 def write_subtasks(
     *,
     llm_client: Any,
@@ -198,6 +205,9 @@ def write_subtasks(
         consistency_context = _consistency_context_from_state(state)
         if consistency_context is not None:
             user_payload["consistency_context"] = consistency_context
+        reflection_tips = _reflection_tips_from_state(state)
+        if reflection_tips:
+            user_payload["writing_tips_from_experience"] = reflection_tips
         if local_context:
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)

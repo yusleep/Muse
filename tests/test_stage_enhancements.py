@@ -466,6 +466,50 @@ class TestWriteSubtasksConsistencyContext(unittest.TestCase):
         self.assertEqual(consistency["citation_counts"]["@smith2024"], 2)
         self.assertEqual(consistency["chapter_summaries"]["ch_01"], "Prior chapter summary.")
 
+    def test_write_subtasks_injects_reflection_tips(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reflection_data={
+                "entries": [
+                    {
+                        "chapter_id": "ch_01",
+                        "dimension": "logic",
+                        "outcome": "positive",
+                        "instruction": "Clarify the core argument before implementation details.",
+                        "score_delta": 2,
+                    }
+                ]
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Reflection", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        tips = seen_payloads[0]["writing_tips_from_experience"]
+        self.assertEqual(len(tips), 1)
+        self.assertIn("Clarify the core argument", tips[0])
+
     def test_retry_result_must_be_longer_to_replace_original(self):
         calls = []
 

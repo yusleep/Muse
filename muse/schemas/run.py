@@ -19,6 +19,7 @@ class ThesisState(TypedDict):
     chapter_results: list[dict[str, Any]]
     current_chapter_index: int
     consistency_data: dict[str, Any]
+    reflection_data: dict[str, Any]
     references: list[ReferenceRecord]
     search_queries: list[str]
     literature_summary: str
@@ -66,6 +67,7 @@ _REQUIRED_KEYS = {
     "chapter_results",
     "current_chapter_index",
     "consistency_data",
+    "reflection_data",
     "references",
     "search_queries",
     "literature_summary",
@@ -96,6 +98,7 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "literature_summary": "",
     "current_chapter_index": 0,
     "consistency_data": {},
+    "reflection_data": {},
     "quality_scores": {},
     "review_notes": [],
     "review_history": [],
@@ -154,6 +157,7 @@ def new_thesis_state(
         chapter_results=[],
         current_chapter_index=0,
         consistency_data={},
+        reflection_data={},
         references=[],
         search_queries=[],
         literature_summary="",

@@ -12,6 +12,7 @@ from langchain_core.tools import tool
 from muse.graph.helpers.draft_support import (
     _build_refs_snapshot,
     _consistency_context_from_state,
+    _reflection_tips_from_state,
 )
 from muse.tools._context import AgentRuntimeContext
 from muse.tools.orchestration import append_partial_subtask_result
@@ -168,6 +169,9 @@ def write_section(
     consistency_context = _consistency_context_from_state(tool_state)
     if consistency_context is not None:
         user_payload["consistency_context"] = consistency_context
+    reflection_tips = _reflection_tips_from_state(tool_state)
+    if reflection_tips:
+        user_payload["writing_tips_from_experience"] = reflection_tips
     user = json.dumps(user_payload, ensure_ascii=False)
 
     llm_call_failed = False

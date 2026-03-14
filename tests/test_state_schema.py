@@ -20,6 +20,7 @@ class ThesisStateSchemaTests(unittest.TestCase):
         self.assertIn("coherence_issues", hints)
         self.assertIn("_citation_repair_attempted", hints)
         self.assertIn("revision_instructions", hints)
+        self.assertIn("reflection_data", hints)
 
     def test_new_state_contains_required_keys(self):
         state = new_thesis_state(
@@ -91,6 +92,7 @@ class ThesisStateSchemaTests(unittest.TestCase):
         self.assertEqual(hydrated["review_iteration"], 1)
         self.assertEqual(hydrated["coherence_issues"], [])
         self.assertFalse(hydrated["_citation_repair_attempted"])
+        self.assertEqual(hydrated["reflection_data"], {})
 
 
 class ChapterRevisionInstructionTests(unittest.TestCase):
