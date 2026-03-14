@@ -17,7 +17,7 @@ _STAGE_CHOICES = ["research", "outline", "draft", "final"]
 _STAGE_TO_ANCHOR_NODE = {
     "research": "review_refs",
     "outline": "approve_outline",
-    "draft": "review_draft",
+    "draft": "citation_subgraph",
     "final": "approve_final",
 }
 
@@ -230,6 +230,14 @@ def _normalize_saved_state(run_id: str, state: dict[str, Any]) -> dict[str, Any]
         "outline": outline,
         "chapter_plans": state.get("chapter_plans", []),
         "chapters": chapters,
+        "quality_scores": state.get("quality_scores", {}),
+        "review_notes": state.get("review_notes", []),
+        "review_history": state.get("review_history", []),
+        "review_iteration": state.get("review_iteration", 1),
+        "structural_iterations": state.get("structural_iterations", 0),
+        "content_iterations": state.get("content_iterations", 0),
+        "line_iterations": state.get("line_iterations", 0),
+        "review_layer": state.get("review_layer", ""),
         "citation_uses": state.get("citation_uses", []),
         "citation_ledger": state.get("citation_ledger", {}),
         "claim_text_by_id": state.get("claim_text_by_id", {}),

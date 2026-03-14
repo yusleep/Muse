@@ -5,6 +5,7 @@ import os
 import tempfile
 import textwrap
 import unittest
+from pathlib import Path
 
 from muse.config import (
     Settings,
@@ -135,6 +136,10 @@ class TestYamlToSettings(unittest.TestCase):
         self.assertEqual(kw["middleware_context_window"], 64000)
         self.assertEqual(kw["runs_dir"], os.path.join(config_dir, "my_runs"))
 
+    def test_review_mode_extraction(self):
+        kw = _yaml_to_settings({"review": {"mode": "layered"}}, {}, None)
+        self.assertEqual(kw["review_mode"], "layered")
+
 
 class TestLoadFromYamlFile(unittest.TestCase):
     def test_load_from_yaml_file(self):
@@ -175,6 +180,35 @@ class TestLoadFromYamlFile(unittest.TestCase):
             self.assertEqual(settings.openalex_email, "test@example.com")
             self.assertEqual(settings.middleware_retry_max, 5)
             self.assertEqual(settings.runs_dir, os.path.join(os.path.dirname(yaml_path), "yaml_runs"))
+        finally:
+            os.unlink(yaml_path)
+
+    def test_loads_review_mode_from_yaml(self):
+        yaml_content = textwrap.dedent("""\
+            auth:
+              profiles:
+                test_key:
+                  api_key_env: TEST_KEY
+            providers:
+              test:
+                base_url: http://localhost
+                api_style: openai
+                auth: test_key
+                models:
+                  test/default: { model: test-model }
+            routes:
+              default: { primary: test/default, fallbacks: [] }
+            review:
+              mode: persona
+        """)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_content)
+            f.flush()
+            yaml_path = f.name
+
+        try:
+            settings = load_settings(env={"MUSE_CONFIG": yaml_path})
+            self.assertEqual(settings.review_mode, "persona")
         finally:
             os.unlink(yaml_path)
 
@@ -402,3 +436,13 @@ class TestLoadFromYamlFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfigExampleRoutes(unittest.TestCase):
+    def test_config_example_documents_refined_review_routes(self):
+        text = Path("config.example.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("writing_revision:", text)
+        self.assertIn("review_judge:", text)
+        self.assertIn("review_structural:", text)
+        self.assertIn("review_line:", text)

@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from muse.cli import build_parser, cmd_resume
+from muse.cli import _resume_from_saved_state, build_parser, cmd_resume
 from muse.config import Settings
 from muse.graph.launcher import invoke
 from muse.runtime import Runtime
@@ -163,6 +163,31 @@ class ResumeCommandFallbackTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["status"], "waiting_hitl")
             self.assertEqual(payload["stage"], "outline")
+
+    def test_resume_from_saved_state_maps_legacy_draft_anchor_to_citation_subgraph(self):
+        class _Graph:
+            def __init__(self):
+                self.as_node = None
+
+            def update_state(self, config, restored, *, as_node):
+                del config, restored
+                self.as_node = as_node
+
+            def invoke(self, state, config=None):
+                del state, config
+                return {"status": "ok"}
+
+        graph = _Graph()
+        result = _resume_from_saved_state(
+            graph,
+            {"review_feedback": []},
+            thread_id="resume-draft",
+            feedback={"stage": "draft", "approved": True},
+            stage_hint="draft",
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(graph.as_node, "citation_subgraph")
 
 
 class OptionalLanggraphImportTests(unittest.TestCase):

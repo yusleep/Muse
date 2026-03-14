@@ -19,6 +19,11 @@ def build_chapter_draft_node(services: Any):
         ch_title = chapter_plan.get("chapter_title", "?")
         n_subtasks = len(chapter_plan.get("subtask_plan", []))
         _log.info("[chapter %s] writing '%s' (%d subtasks)", ch_id, ch_title[:40], n_subtasks)
+        try:
+            iteration = max(int(state.get("iteration", 0)), 0)
+        except (TypeError, ValueError):
+            iteration = 0
+        draft_route = "writing_revision" if iteration > 0 else "writing"
         subtask_results = write_subtasks(
             llm_client=getattr(services, "llm", None),
             state={
@@ -31,6 +36,7 @@ def build_chapter_draft_node(services: Any):
             revision_instructions=state.get("revision_instructions", {}),
             previous=state.get("subtask_results", []),
             rag_index=getattr(services, "rag_index", None),
+            route=draft_route,
         )
 
         merged_text = "\n\n".join(item.get("output_text", "") for item in subtask_results)

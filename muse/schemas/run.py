@@ -20,6 +20,15 @@ class ThesisState(TypedDict):
     references: list[ReferenceRecord]
     search_queries: list[str]
     literature_summary: str
+    quality_scores: dict[str, Any]
+    review_notes: list[dict[str, Any]]
+    review_history: list[dict[str, Any]]
+    review_iteration: int
+    structural_iterations: int
+    content_iterations: int
+    line_iterations: int
+    review_layer: str
+    coherence_issues: list[dict[str, Any]]
     citation_uses: list[CitationUse]
     claim_text_by_id: dict[str, str]
     verified_citations: list[str]
@@ -79,6 +88,15 @@ _REQUIRED_KEYS = {
 _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "search_queries": [],
     "literature_summary": "",
+    "quality_scores": {},
+    "review_notes": [],
+    "review_history": [],
+    "review_iteration": 1,
+    "structural_iterations": 0,
+    "content_iterations": 0,
+    "line_iterations": 0,
+    "review_layer": "",
+    "coherence_issues": [],
     "citation_uses": [],
     "claim_text_by_id": {},
     "verified_citations": [],
@@ -128,6 +146,15 @@ def new_thesis_state(
         references=[],
         search_queries=[],
         literature_summary="",
+        quality_scores={},
+        review_notes=[],
+        review_history=[],
+        review_iteration=1,
+        structural_iterations=0,
+        content_iterations=0,
+        line_iterations=0,
+        review_layer="",
+        coherence_issues=[],
         citation_uses=[],
         claim_text_by_id={},
         verified_citations=[],

@@ -11,6 +11,13 @@ class ThesisStateSchemaTests(unittest.TestCase):
 
         self.assertIn("quality_scores", hints)
         self.assertIn("review_notes", hints)
+        self.assertIn("review_history", hints)
+        self.assertIn("review_iteration", hints)
+        self.assertIn("structural_iterations", hints)
+        self.assertIn("content_iterations", hints)
+        self.assertIn("line_iterations", hints)
+        self.assertIn("review_layer", hints)
+        self.assertIn("coherence_issues", hints)
         self.assertIn("revision_instructions", hints)
 
     def test_new_state_contains_required_keys(self):
@@ -62,6 +69,26 @@ class ThesisStateSchemaTests(unittest.TestCase):
         self.assertIn("flagged_citations", hydrated)
         self.assertIn("stage6_status", hydrated)
         validate_thesis_state(hydrated)
+
+    def test_hydrate_backfills_review_history_defaults(self):
+        hydrated = hydrate_thesis_state(
+            {
+                "project_id": "p_legacy",
+                "topic": "legacy",
+                "discipline": "cs",
+                "language": "zh",
+                "format_standard": "GB/T 7714-2015",
+                "current_stage": 2,
+                "outline_json": {},
+                "chapter_plans": [],
+                "chapter_results": [],
+                "references": [],
+            }
+        )
+
+        self.assertEqual(hydrated["review_history"], [])
+        self.assertEqual(hydrated["review_iteration"], 1)
+        self.assertEqual(hydrated["coherence_issues"], [])
 
 
 class ChapterRevisionInstructionTests(unittest.TestCase):

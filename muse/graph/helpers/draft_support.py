@@ -28,14 +28,14 @@ def _safe_float(value: Any, default: float = 0.5) -> float:
         return default
 
 
-def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str, Any]:
+def _extract_text_from_raw(llm_client: Any, system: str, user: str, *, route: str) -> dict[str, Any]:
     """Fallback: call LLM in plain text mode and wrap as dict with `text`."""
 
     try:
         out = llm_client.text(
             system="Write the subsection content directly as plain text. Do NOT use JSON formatting.",
             user=user,
-            route="writing",
+            route=route,
             max_tokens=2800,
         )
         return {
@@ -52,7 +52,14 @@ def _extract_text_from_raw(llm_client: Any, system: str, user: str) -> dict[str,
         return {"text": ""}
 
 
-def _call_write_llm(llm_client: Any, system: str, user: str, max_retries: int = 2) -> dict[str, Any]:
+def _call_write_llm(
+    llm_client: Any,
+    system: str,
+    user: str,
+    *,
+    route: str,
+    max_retries: int = 2,
+) -> dict[str, Any]:
     """Call the structured writing route with fallback to raw-text mode."""
 
     if llm_client is None:
@@ -61,12 +68,12 @@ def _call_write_llm(llm_client: Any, system: str, user: str, max_retries: int = 
     out = None
     for attempt in range(max_retries + 1):
         try:
-            out = llm_client.structured(system=system, user=user, route="writing", max_tokens=2800)
+            out = llm_client.structured(system=system, user=user, route=route, max_tokens=2800)
             break
         except Exception:
             if attempt < max_retries:
                 continue
-            out = _extract_text_from_raw(llm_client, system, user)
+            out = _extract_text_from_raw(llm_client, system, user, route=route)
             break
     if out is None:
         return {}
@@ -123,6 +130,7 @@ def write_subtasks(
     revision_instructions: dict[str, str],
     previous: list[dict[str, Any]],
     rag_index: Any = None,
+    route: str = "writing",
 ) -> list[dict[str, Any]]:
     results = []
     prev_text = ""
@@ -178,7 +186,7 @@ def write_subtasks(
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)
 
-        out = _call_write_llm(llm_client, system, user)
+        out = _call_write_llm(llm_client, system, user, route=route)
 
         text = str(out.get("text", "")).strip()
         if not text:
@@ -206,6 +214,7 @@ def write_subtasks(
                 llm_client,
                 system,
                 json.dumps(retry_payload, ensure_ascii=False),
+                route=route,
             )
             retry_text = str(retry_out.get("text", "")).strip()
             retry_words = len(retry_text.split())

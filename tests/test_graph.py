@@ -120,6 +120,61 @@ class GraphShellTests(unittest.TestCase):
             checkpoint_path = Path(tmp) / "run-1" / "graph" / "checkpoints.sqlite"
             self.assertTrue(checkpoint_path.exists())
 
+    def test_build_graph_default_classic_skips_global_review_node(self):
+        from muse.graph.launcher import build_graph
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+
+            graph = build_graph(settings, services=_FakeServices(), thread_id="run-classic")
+            graph_repr = graph.get_graph()
+            edges = {(edge.source, edge.target) for edge in graph_repr.edges}
+
+            self.assertNotIn("review_draft", graph_repr.nodes)
+            self.assertNotIn("global_review", graph_repr.nodes)
+            self.assertIn("coherence_check", graph_repr.nodes)
+            self.assertIn(("merge_chapters", "coherence_check"), edges)
+            self.assertIn(("coherence_check", "citation_subgraph"), edges)
+
+    def test_build_graph_layered_mode_inserts_global_review_node(self):
+        from muse.graph.launcher import build_graph
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+            object.__setattr__(settings, "review_mode", "layered")
+
+            graph = build_graph(settings, services=_FakeServices(), thread_id="run-layered")
+            graph_repr = graph.get_graph()
+            edges = {(edge.source, edge.target) for edge in graph_repr.edges}
+
+            self.assertIn("coherence_check", graph_repr.nodes)
+            self.assertIn("global_review", graph_repr.nodes)
+            self.assertIn(("merge_chapters", "coherence_check"), edges)
+            self.assertIn(("coherence_check", "global_review"), edges)
+            self.assertIn(("global_review", "citation_subgraph"), edges)
+
 
 if __name__ == "__main__":
     unittest.main()
