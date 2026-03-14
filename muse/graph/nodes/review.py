@@ -185,6 +185,32 @@ def _review_notes_summary(review_notes: list[dict[str, Any]]) -> str:
     return "; ".join(snippets)
 
 
+def _safe_severity(note: dict[str, Any]) -> int:
+    try:
+        return int(note.get("severity", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _top_review_instructions(review_notes: list[dict[str, Any]], limit: int = 3) -> list[str]:
+    ranked_notes = sorted(
+        (note for note in review_notes if isinstance(note, dict)),
+        key=_safe_severity,
+        reverse=True,
+    )
+    instructions: list[str] = []
+    seen: set[str] = set()
+    for note in ranked_notes:
+        instruction = str(note.get("instruction", "")).strip()
+        if not instruction or instruction in seen:
+            continue
+        seen.add(instruction)
+        instructions.append(instruction)
+        if len(instructions) >= limit:
+            break
+    return instructions
+
+
 def _build_review_record(
     *,
     iteration: int,
@@ -196,7 +222,27 @@ def _build_review_record(
         "scores": dict(scores),
         "notes_summary": _review_notes_summary(review_notes),
         "note_count": len(review_notes),
+        "top_instructions": _top_review_instructions(review_notes),
     }
+
+
+def _update_reflection_data(
+    state: dict[str, Any],
+    *,
+    current_review_record: dict[str, Any],
+) -> dict[str, Any]:
+    from muse.graph.helpers.reflection_bank import ReflectionBank
+
+    review_history = state.get("review_history", [])
+    if not isinstance(review_history, list):
+        review_history = []
+    updated_history = [item for item in review_history if isinstance(item, dict)] + [current_review_record]
+    bank = ReflectionBank.from_dict(state.get("reflection_data", {}))
+    bank.add_reflection(
+        updated_history,
+        chapter_id=str(state.get("project_id", "") or "thesis"),
+    )
+    return bank.to_dict()
 
 
 def _sanitize_persona_packet(persona: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -452,6 +498,10 @@ def build_layered_review_node(services: Any, *, layer: str, route: str = "review
             "review_layer": layer,
             "review_history": [record],
             "review_iteration": current_review_iteration + 1,
+            "reflection_data": _update_reflection_data(
+                state,
+                current_review_record=record,
+            ),
         }
 
     return layered_review
@@ -545,6 +595,10 @@ def build_global_review_node(services: Any, *, mode: str = "classic"):
             "review_notes": review_notes,
             "review_history": [current_review_record],
             "review_iteration": iteration + 1,
+            "reflection_data": _update_reflection_data(
+                state,
+                current_review_record=current_review_record,
+            ),
         }
 
     return global_review

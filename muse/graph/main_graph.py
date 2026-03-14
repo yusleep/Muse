@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 
 from muse.config import Settings
 from muse.graph.nodes import (
+    build_citation_repair_node,
     build_export_node,
     build_initialize_node,
     build_interrupt_node,
@@ -18,15 +19,38 @@ from muse.graph.nodes import (
     build_outline_node,
     build_polish_node,
     build_coherence_check_node,
+    build_ref_analysis_node,
     build_search_node,
 )
-from muse.graph.nodes.draft import fan_out_chapters
+from muse.graph.nodes.draft import (
+    build_prepare_next_chapter_node,
+    build_update_cross_chapter_state_node,
+    next_chapter_route,
+)
 from muse.graph.state import MuseState
 from muse.graph.subgraphs.chapter import build_chapter_subgraph_node
 from muse.graph.subgraphs.citation import build_citation_subgraph_node
 from muse.graph.subgraphs.composition import build_composition_subgraph_node
 from muse.graph.subgraphs.review import build_global_review_subgraph_node
 from muse.middlewares import build_default_chain
+
+
+def _citation_quality_route(state: dict[str, Any]) -> str:
+    flagged = state.get("flagged_citations", [])
+    verified = state.get("verified_citations", [])
+    if not isinstance(flagged, list):
+        flagged = []
+    if not isinstance(verified, list):
+        verified = []
+
+    total = len(flagged) + len(verified)
+    if total == 0:
+        return "polish"
+
+    flagged_ratio = len(flagged) / total
+    if flagged_ratio > 0.2 and not bool(state.get("citation_repair_attempted", False)):
+        return "citation_repair"
+    return "polish"
 
 
 class _NullServices:
@@ -109,10 +133,37 @@ def build_graph(
     )
     builder.add_node("approve_outline", build_interrupt_node("outline", auto_approve=auto_approve))
     builder.add_node(
+        "ref_analysis",
+        _wrap(
+            build_ref_analysis_node(services=services),
+            "ref_analysis",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "chapter_subgraph",
         _wrap(
             build_chapter_subgraph_node(services=services, settings=settings),
             "chapter_subgraph",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "prepare_next_chapter",
+        _wrap(
+            build_prepare_next_chapter_node(),
+            "prepare_next_chapter",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "update_cross_chapter_state",
+        _wrap(
+            build_update_cross_chapter_state_node(),
+            "update_cross_chapter_state",
             settings,
             services,
         ),
@@ -155,6 +206,15 @@ def build_graph(
         ),
     )
     builder.add_node(
+        "citation_repair",
+        _wrap(
+            build_citation_repair_node(),
+            "citation_repair",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "polish",
         _wrap(build_polish_node(services), "polish", settings, services),
     )
@@ -177,8 +237,15 @@ def build_graph(
     builder.add_edge("search", "review_refs")
     builder.add_edge("review_refs", "outline")
     builder.add_edge("outline", "approve_outline")
-    builder.add_conditional_edges("approve_outline", fan_out_chapters, ["chapter_subgraph"])
-    builder.add_edge("chapter_subgraph", "merge_chapters")
+    builder.add_edge("approve_outline", "ref_analysis")
+    builder.add_edge("ref_analysis", "prepare_next_chapter")
+    builder.add_conditional_edges(
+        "prepare_next_chapter",
+        next_chapter_route,
+        {"chapter_subgraph": "chapter_subgraph", "merge_chapters": "merge_chapters"},
+    )
+    builder.add_edge("chapter_subgraph", "update_cross_chapter_state")
+    builder.add_edge("update_cross_chapter_state", "prepare_next_chapter")
     if review_mode == "classic":
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "citation_subgraph")
@@ -186,7 +253,12 @@ def build_graph(
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "global_review")
         builder.add_edge("global_review", "citation_subgraph")
-    builder.add_edge("citation_subgraph", "polish")
+    builder.add_conditional_edges(
+        "citation_subgraph",
+        _citation_quality_route,
+        {"citation_repair": "citation_repair", "polish": "polish"},
+    )
+    builder.add_edge("citation_repair", "citation_subgraph")
     builder.add_edge("polish", "composition_subgraph")
     builder.add_edge("composition_subgraph", "approve_final")
     builder.add_edge("approve_final", "export")

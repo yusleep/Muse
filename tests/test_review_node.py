@@ -113,6 +113,10 @@ class ReviewNodeTests(unittest.TestCase):
         self.assertEqual(result["review_iteration"], 2)
         self.assertEqual(result["review_history"][0]["iteration"], 1)
         self.assertIn("problem statement", result["review_history"][0]["notes_summary"])
+        self.assertIn(
+            "Tighten the transition into the problem statement.",
+            result["review_history"][0]["top_instructions"],
+        )
         self.assertFalse(result["review_notes"][0]["is_recurring"])
 
     def test_global_review_node_uses_adaptive_prompt_after_first_iteration(self):
@@ -161,6 +165,8 @@ class ReviewNodeTests(unittest.TestCase):
         self.assertEqual(result["review_iteration"], 3)
         self.assertTrue(result["review_notes"][0]["is_recurring"])
         self.assertEqual(result["review_history"][0]["iteration"], 2)
+        self.assertEqual(result["reflection_data"]["entries"][0]["dimension"], "logic")
+        self.assertEqual(result["reflection_data"]["entries"][0]["outcome"], "positive")
 
     def test_global_review_node_persona_mode_uses_judge_route_and_filters_dimensions(self):
         from muse.graph.nodes.review import build_global_review_node
@@ -318,6 +324,7 @@ class ReviewNodeTests(unittest.TestCase):
         self.assertEqual(result["quality_scores"]["style"], 3)
         self.assertEqual(result["review_notes"][0]["severity"], 5)
         self.assertEqual(result["review_history"][0]["note_count"], 3)
+        self.assertIn("top_instructions", result["review_history"][0])
 
 
 if __name__ == "__main__":

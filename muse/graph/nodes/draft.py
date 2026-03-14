@@ -7,6 +7,7 @@ from typing import Any
 
 from langgraph.types import Send
 
+from muse.graph.helpers.memory_keeper import ConsistencyStore
 from muse.graph.helpers.draft_support import write_subtasks
 
 _log = logging.getLogger("muse.draft")
@@ -30,7 +31,11 @@ def build_chapter_draft_node(services: Any):
                 "topic": state.get("topic", ""),
                 "language": state.get("language", "zh"),
                 "references": state.get("references", []),
+                "consistency_data": state.get("consistency_data", {}),
+                "reflection_data": state.get("reflection_data", {}),
+                "reference_briefs": state.get("reference_briefs", {}),
             },
+            chapter_id=chapter_plan.get("chapter_id", ""),
             chapter_title=chapter_plan.get("chapter_title", ""),
             subtask_plan=chapter_plan.get("subtask_plan", []),
             revision_instructions=state.get("revision_instructions", {}),
@@ -67,6 +72,73 @@ def build_chapter_draft_node(services: Any):
         }
 
     return chapter_draft
+
+
+def build_prepare_next_chapter_node():
+    def prepare_next_chapter(state: dict[str, Any]) -> dict[str, Any]:
+        chapter_plans = state.get("chapter_plans", [])
+        if not isinstance(chapter_plans, list):
+            chapter_plans = []
+        try:
+            chapter_index = max(int(state.get("current_chapter_index", 0)), 0)
+        except (TypeError, ValueError):
+            chapter_index = 0
+
+        if chapter_index >= len(chapter_plans):
+            return {}
+
+        chapter_plan = chapter_plans[chapter_index]
+        return {
+            "chapter_plan": chapter_plan,
+            "subtask_results": [],
+            "merged_text": "",
+            "quality_scores": {},
+            "review_notes": [],
+            "revision_instructions": {},
+            "iteration": 0,
+            "max_iterations": 3,
+            "citation_uses": [],
+            "claim_text_by_id": {},
+        }
+
+    return prepare_next_chapter
+
+
+def next_chapter_route(state: dict[str, Any]) -> str:
+    chapter_plans = state.get("chapter_plans", [])
+    if not isinstance(chapter_plans, list):
+        chapter_plans = []
+    try:
+        chapter_index = max(int(state.get("current_chapter_index", 0)), 0)
+    except (TypeError, ValueError):
+        chapter_index = 0
+    if chapter_index < len(chapter_plans):
+        return "chapter_subgraph"
+    return "merge_chapters"
+
+
+def build_update_cross_chapter_state_node():
+    def update_cross_chapter_state(state: dict[str, Any]) -> dict[str, Any]:
+        chapter_plan = state.get("chapter_plan", {})
+        chapter_id = str(chapter_plan.get("chapter_id", "")).strip() if isinstance(chapter_plan, dict) else ""
+        chapters = state.get("chapters", {})
+        chapter_result = chapters.get(chapter_id, {}) if isinstance(chapters, dict) else {}
+
+        consistency_store = ConsistencyStore.from_dict(state.get("consistency_data", {}))
+        if isinstance(chapter_result, dict):
+            consistency_store.update_from_chapter(chapter_result)
+
+        try:
+            chapter_index = max(int(state.get("current_chapter_index", 0)), 0)
+        except (TypeError, ValueError):
+            chapter_index = 0
+
+        return {
+            "consistency_data": consistency_store.to_dict(),
+            "current_chapter_index": chapter_index + 1,
+        }
+
+    return update_cross_chapter_state
 
 
 def fan_out_chapters(state: dict[str, Any]) -> list[Send]:

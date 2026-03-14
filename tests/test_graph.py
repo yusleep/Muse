@@ -143,9 +143,22 @@ class GraphShellTests(unittest.TestCase):
 
             self.assertNotIn("review_draft", graph_repr.nodes)
             self.assertNotIn("global_review", graph_repr.nodes)
+            self.assertIn("prepare_next_chapter", graph_repr.nodes)
+            self.assertIn("ref_analysis", graph_repr.nodes)
+            self.assertIn("update_cross_chapter_state", graph_repr.nodes)
             self.assertIn("coherence_check", graph_repr.nodes)
+            self.assertIn("citation_repair", graph_repr.nodes)
+            self.assertIn(("approve_outline", "ref_analysis"), edges)
+            self.assertIn(("ref_analysis", "prepare_next_chapter"), edges)
+            self.assertIn(("prepare_next_chapter", "chapter_subgraph"), edges)
+            self.assertIn(("prepare_next_chapter", "merge_chapters"), edges)
+            self.assertIn(("chapter_subgraph", "update_cross_chapter_state"), edges)
+            self.assertIn(("update_cross_chapter_state", "prepare_next_chapter"), edges)
             self.assertIn(("merge_chapters", "coherence_check"), edges)
             self.assertIn(("coherence_check", "citation_subgraph"), edges)
+            self.assertIn(("citation_subgraph", "citation_repair"), edges)
+            self.assertIn(("citation_subgraph", "polish"), edges)
+            self.assertIn(("citation_repair", "citation_subgraph"), edges)
 
     def test_build_graph_layered_mode_inserts_global_review_node(self):
         from muse.graph.launcher import build_graph
@@ -171,9 +184,22 @@ class GraphShellTests(unittest.TestCase):
 
             self.assertIn("coherence_check", graph_repr.nodes)
             self.assertIn("global_review", graph_repr.nodes)
+            self.assertIn("prepare_next_chapter", graph_repr.nodes)
+            self.assertIn("ref_analysis", graph_repr.nodes)
+            self.assertIn("update_cross_chapter_state", graph_repr.nodes)
+            self.assertIn("citation_repair", graph_repr.nodes)
+            self.assertIn(("approve_outline", "ref_analysis"), edges)
+            self.assertIn(("ref_analysis", "prepare_next_chapter"), edges)
+            self.assertIn(("prepare_next_chapter", "chapter_subgraph"), edges)
+            self.assertIn(("prepare_next_chapter", "merge_chapters"), edges)
+            self.assertIn(("chapter_subgraph", "update_cross_chapter_state"), edges)
+            self.assertIn(("update_cross_chapter_state", "prepare_next_chapter"), edges)
             self.assertIn(("merge_chapters", "coherence_check"), edges)
             self.assertIn(("coherence_check", "global_review"), edges)
             self.assertIn(("global_review", "citation_subgraph"), edges)
+            self.assertIn(("citation_subgraph", "citation_repair"), edges)
+            self.assertIn(("citation_subgraph", "polish"), edges)
+            self.assertIn(("citation_repair", "citation_subgraph"), edges)
 
 
 if __name__ == "__main__":

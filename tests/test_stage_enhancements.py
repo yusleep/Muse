@@ -424,6 +424,206 @@ class TestWriteSubtasksWordCountRetry(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(results[0]["actual_words"], 950)
 
+
+class TestWriteSubtasksConsistencyContext(unittest.TestCase):
+    def test_write_subtasks_injects_consistency_context(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            consistency_data={
+                "glossary": {"Agent Runtime": "智能体运行时"},
+                "citation_counts": {"@smith2024": 2},
+                "notation": {},
+                "chapter_summaries": {"ch_01": "Prior chapter summary."},
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Consistency", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        consistency = seen_payloads[0]["consistency_context"]
+        self.assertEqual(consistency["glossary"]["Agent Runtime"], "智能体运行时")
+        self.assertEqual(consistency["citation_counts"]["@smith2024"], 2)
+        self.assertEqual(consistency["chapter_summaries"]["ch_01"], "Prior chapter summary.")
+
+    def test_write_subtasks_injects_reflection_tips(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reflection_data={
+                "entries": [
+                    {
+                        "chapter_id": "ch_01",
+                        "dimension": "logic",
+                        "outcome": "positive",
+                        "instruction": "Clarify the core argument before implementation details.",
+                        "score_delta": 2,
+                    }
+                ]
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Reflection", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        tips = seen_payloads[0]["writing_tips_from_experience"]
+        self.assertEqual(len(tips), 1)
+        self.assertIn("Clarify the core argument", tips[0])
+
+    def test_write_subtasks_injects_reference_briefs_and_gaps(self):
+        seen_payloads = []
+
+        class _CaptureLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, route, max_tokens
+                seen_payloads.append(json.loads(user))
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reference_briefs={
+                "ch_02": [
+                    {
+                        "ref_id": "@smith2024",
+                        "relevance": "directly addresses method",
+                        "key_finding": "Table 2 shows a 15% improvement.",
+                        "how_to_cite": "Use as main evidence.",
+                    }
+                ],
+                "ch_02_gaps": ["No source covers deployment constraints."],
+            },
+        )
+
+        write_subtasks(
+            llm_client=_CaptureLLM(),
+            state=state,
+            chapter_id="ch_02",
+            chapter_title="Chapter 2",
+            subtask_plan=[{"subtask_id": "sub_01", "title": "Reference Briefs", "target_words": 500}],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual(seen_payloads[-1]["reference_briefs"][0]["ref_id"], "@smith2024")
+        self.assertEqual(seen_payloads[-1]["evidence_gaps"], ["No source covers deployment constraints."])
+
+    def test_write_subtasks_injects_argument_plan_from_reference_briefs(self):
+        calls = []
+
+        class _PlanningLLM:
+            def structured(self, *, system, user, route, max_tokens):
+                del system, max_tokens
+                calls.append({"route": route, "user": json.loads(user)})
+                if route == "default":
+                    return {
+                        "core_claim": "Contrastive learning improves multimodal alignment.",
+                        "evidence_chain": [
+                            {
+                                "claim": "Contrastive learning reduces alignment gap.",
+                                "source": "@smith2024",
+                                "specific_finding": "Table 2 shows a 15% improvement.",
+                            },
+                            {
+                                "claim": "Hallucinated evidence should be filtered.",
+                                "source": "@fake2024",
+                                "specific_finding": "Unsupported.",
+                            },
+                        ],
+                        "logical_flow": "problem -> method -> evidence",
+                        "paragraph_count": 3,
+                    }
+                return {
+                    "text": "word " * 500,
+                    "citations_used": [],
+                    "key_claims": [],
+                    "transition_out": "",
+                    "glossary_additions": {},
+                    "self_assessment": {"confidence": 0.8, "weak_spots": [], "needs_revision": False},
+                }
+
+        state = _make_state(
+            references=[],
+            reference_briefs={
+                "ch_02": [
+                    {
+                        "ref_id": "@smith2024",
+                        "relevance": "directly addresses method",
+                        "key_finding": "Table 2 shows a 15% improvement.",
+                        "how_to_cite": "Use as main evidence.",
+                    }
+                ],
+            },
+        )
+
+        write_subtasks(
+            llm_client=_PlanningLLM(),
+            state=state,
+            chapter_id="ch_02",
+            chapter_title="Chapter 2",
+            subtask_plan=[
+                {
+                    "subtask_id": "sub_01",
+                    "title": "Argument Planning",
+                    "description": "Explain why the method works.",
+                    "target_words": 500,
+                }
+            ],
+            revision_instructions={},
+            previous=[],
+        )
+
+        self.assertEqual([call["route"] for call in calls], ["default", "writing"])
+        evidence_chain = calls[1]["user"]["argument_plan"]["evidence_chain"]
+        self.assertEqual(len(evidence_chain), 1)
+        self.assertEqual(evidence_chain[0]["source"], "@smith2024")
+
     def test_retry_result_must_be_longer_to_replace_original(self):
         calls = []
 

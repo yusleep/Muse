@@ -31,6 +31,15 @@ class MuseState(TypedDict, total=False):
 
     outline: dict[str, Any]
     chapter_plans: list[dict[str, Any]]
+    current_chapter_index: int
+    consistency_data: Annotated[dict[str, Any], _merge_dict]
+    reflection_data: Annotated[dict[str, Any], _merge_dict]
+    reference_briefs: Annotated[dict[str, Any], _merge_dict]
+    chapter_plan: dict[str, Any]
+    subtask_results: list[dict[str, Any]]
+    merged_text: str
+    iteration: int
+    max_iterations: int
 
     chapters: Annotated[dict[str, Any], _merge_dict]
     quality_scores: dict[str, Any]
@@ -50,6 +59,7 @@ class MuseState(TypedDict, total=False):
 
     verified_citations: list[str]
     flagged_citations: list[dict[str, Any]]
+    citation_repair_attempted: bool
 
     paper_package: Annotated[dict[str, Any], _merge_dict]
     final_text: str

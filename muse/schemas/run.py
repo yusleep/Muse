@@ -17,6 +17,10 @@ class ThesisState(TypedDict):
     outline_json: dict[str, Any]
     chapter_plans: list[dict[str, Any]]
     chapter_results: list[dict[str, Any]]
+    current_chapter_index: int
+    consistency_data: dict[str, Any]
+    reflection_data: dict[str, Any]
+    reference_briefs: dict[str, Any]
     references: list[ReferenceRecord]
     search_queries: list[str]
     literature_summary: str
@@ -33,6 +37,7 @@ class ThesisState(TypedDict):
     claim_text_by_id: dict[str, str]
     verified_citations: list[str]
     flagged_citations: list[FlaggedCitation]
+    citation_repair_attempted: bool
     terminology_glossary: dict[str, str]
     thesis_summary: str
     polish_notes: list[str]
@@ -61,6 +66,10 @@ _REQUIRED_KEYS = {
     "outline_json",
     "chapter_plans",
     "chapter_results",
+    "current_chapter_index",
+    "consistency_data",
+    "reflection_data",
+    "reference_briefs",
     "references",
     "search_queries",
     "literature_summary",
@@ -68,6 +77,7 @@ _REQUIRED_KEYS = {
     "claim_text_by_id",
     "verified_citations",
     "flagged_citations",
+    "citation_repair_attempted",
     "terminology_glossary",
     "thesis_summary",
     "polish_notes",
@@ -88,6 +98,10 @@ _REQUIRED_KEYS = {
 _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "search_queries": [],
     "literature_summary": "",
+    "current_chapter_index": 0,
+    "consistency_data": {},
+    "reflection_data": {},
+    "reference_briefs": {},
     "quality_scores": {},
     "review_notes": [],
     "review_history": [],
@@ -101,6 +115,7 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "claim_text_by_id": {},
     "verified_citations": [],
     "flagged_citations": [],
+    "citation_repair_attempted": False,
     "terminology_glossary": {},
     "thesis_summary": "",
     "polish_notes": [],
@@ -143,6 +158,10 @@ def new_thesis_state(
         outline_json={},
         chapter_plans=[],
         chapter_results=[],
+        current_chapter_index=0,
+        consistency_data={},
+        reflection_data={},
+        reference_briefs={},
         references=[],
         search_queries=[],
         literature_summary="",
@@ -159,6 +178,7 @@ def new_thesis_state(
         claim_text_by_id={},
         verified_citations=[],
         flagged_citations=[],
+        citation_repair_attempted=False,
         terminology_glossary={},
         thesis_summary="",
         polish_notes=[],

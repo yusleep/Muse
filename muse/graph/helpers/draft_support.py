@@ -6,6 +6,8 @@ import json
 import logging
 from typing import Any
 
+from muse.prompts.argument_plan import argument_plan_prompt
+
 _log = logging.getLogger("muse.draft")
 
 
@@ -121,10 +123,138 @@ def _build_refs_snapshot(
     return snapshot[:50]
 
 
+def _consistency_context_from_state(state: dict[str, Any]) -> dict[str, Any] | None:
+    from muse.graph.helpers.memory_keeper import ConsistencyStore
+
+    store = ConsistencyStore.from_dict(state.get("consistency_data", {}))
+    context = store.get_context_for_draft()
+    if not any(context.get(key) for key in ("glossary", "citation_counts", "notation", "chapter_summaries")):
+        return None
+    context["instruction"] = (
+        "Keep terminology, notation, and citation choices consistent with earlier chapters."
+    )
+    return context
+
+
+def _reflection_tips_from_state(state: dict[str, Any]) -> list[str]:
+    from muse.graph.helpers.reflection_bank import ReflectionBank
+
+    bank = ReflectionBank.from_dict(state.get("reflection_data", {}))
+    return bank.get_writing_tips(max_tips=3)
+
+
+def _chapter_reference_context_from_state(
+    state: dict[str, Any],
+    *,
+    chapter_id: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    briefs = state.get("reference_briefs", {})
+    if not isinstance(briefs, dict):
+        return [], []
+    chapter_key = str(chapter_id).strip()
+    chapter_briefs = briefs.get(chapter_key, [])
+    evidence_gaps = briefs.get(f"{chapter_key}_gaps", [])
+    if not isinstance(chapter_briefs, list):
+        chapter_briefs = []
+    if not isinstance(evidence_gaps, list):
+        evidence_gaps = []
+    return (
+        [dict(item) for item in chapter_briefs if isinstance(item, dict)],
+        [str(item).strip() for item in evidence_gaps if str(item).strip()],
+    )
+
+
+def _sanitize_argument_plan(
+    payload: Any,
+    *,
+    allowed_sources: set[str],
+) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+
+    evidence_chain = payload.get("evidence_chain", [])
+    if not isinstance(evidence_chain, list):
+        evidence_chain = []
+    sanitized_chain: list[dict[str, Any]] = []
+    for item in evidence_chain:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source", "")).strip()
+        claim = str(item.get("claim", "")).strip()
+        finding = str(item.get("specific_finding", "")).strip()
+        if not source or source not in allowed_sources or not claim:
+            continue
+        sanitized_chain.append(
+            {
+                "claim": claim,
+                "source": source,
+                "specific_finding": finding,
+            }
+        )
+
+    paragraph_count = payload.get("paragraph_count", 0)
+    try:
+        paragraph_count = max(int(paragraph_count), 0)
+    except (TypeError, ValueError):
+        paragraph_count = 0
+
+    sanitized = {
+        "core_claim": str(payload.get("core_claim", "")).strip(),
+        "evidence_chain": sanitized_chain,
+        "logical_flow": str(payload.get("logical_flow", "")).strip(),
+        "paragraph_count": paragraph_count,
+    }
+    if not any(
+        (
+            sanitized["core_claim"],
+            sanitized["evidence_chain"],
+            sanitized["logical_flow"],
+            sanitized["paragraph_count"],
+        )
+    ):
+        return None
+    return sanitized
+
+
+def _argument_plan_from_briefs(
+    llm_client: Any,
+    *,
+    subtask: dict[str, Any],
+    chapter_briefs: list[dict[str, Any]],
+    language: str,
+) -> dict[str, Any] | None:
+    if llm_client is None or not chapter_briefs:
+        return None
+
+    system, user = argument_plan_prompt(
+        str(subtask.get("title", "")),
+        str(subtask.get("description", "")),
+        chapter_briefs,
+        language=language,
+    )
+    try:
+        payload = llm_client.structured(
+            system=system,
+            user=user,
+            route="default",
+            max_tokens=800,
+        )
+    except Exception:
+        return None
+
+    allowed_sources = {
+        str(item.get("ref_id", "")).strip()
+        for item in chapter_briefs
+        if isinstance(item, dict) and str(item.get("ref_id", "")).strip()
+    }
+    return _sanitize_argument_plan(payload, allowed_sources=allowed_sources)
+
+
 def write_subtasks(
     *,
     llm_client: Any,
     state: dict[str, Any],
+    chapter_id: str = "",
     chapter_title: str,
     subtask_plan: list[dict[str, Any]],
     revision_instructions: dict[str, str],
@@ -163,6 +293,8 @@ def write_subtasks(
             "Do NOT include content that belongs to other subtasks. "
             "If a related topic is outside this subtask's scope, mention it briefly "
             "and note that it will be covered in a later section. "
+            "If an argument_plan is provided, follow its logical_flow and make each paragraph execute one step "
+            "of the evidence_chain. "
             "References marked source=local are author-provided core papers and should be prioritized when relevant. "
             "References marked indexed=true include full-text section metadata that the writing agent can drill into. "
             "Include specific technical details, mathematical notation where appropriate, "
@@ -182,6 +314,28 @@ def write_subtasks(
             "previous_subsection": prev_text,
             "revision_instruction": revision_instructions.get(sid),
         }
+        consistency_context = _consistency_context_from_state(state)
+        if consistency_context is not None:
+            user_payload["consistency_context"] = consistency_context
+        reflection_tips = _reflection_tips_from_state(state)
+        if reflection_tips:
+            user_payload["writing_tips_from_experience"] = reflection_tips
+        chapter_briefs, evidence_gaps = _chapter_reference_context_from_state(
+            state,
+            chapter_id=chapter_id,
+        )
+        if chapter_briefs:
+            user_payload["reference_briefs"] = chapter_briefs
+        if evidence_gaps:
+            user_payload["evidence_gaps"] = evidence_gaps
+        argument_plan = _argument_plan_from_briefs(
+            llm_client,
+            subtask=subtask,
+            chapter_briefs=chapter_briefs,
+            language=str(state.get("language", "zh")),
+        )
+        if argument_plan is not None:
+            user_payload["argument_plan"] = argument_plan
         if local_context:
             user_payload["local_context"] = local_context
         user = json.dumps(user_payload, ensure_ascii=False)

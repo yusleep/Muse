@@ -9,7 +9,13 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
-from muse.graph.helpers.draft_support import _build_refs_snapshot
+from muse.graph.helpers.draft_support import (
+    _argument_plan_from_briefs,
+    _build_refs_snapshot,
+    _chapter_reference_context_from_state,
+    _consistency_context_from_state,
+    _reflection_tips_from_state,
+)
 from muse.tools._context import AgentRuntimeContext
 from muse.tools.orchestration import append_partial_subtask_result
 
@@ -140,6 +146,8 @@ def write_section(
         "Do NOT include content that belongs to other subtasks. "
         "If a related topic is outside this subtask's scope, mention it briefly "
         "and note that it will be covered in a later section. "
+        "If an argument_plan is provided, follow its logical_flow and make each paragraph execute one step "
+        "of the evidence_chain. "
         "References marked source=local are author-provided core papers and should be prioritized when relevant. "
         "For references marked indexed=true, use get_paper_section when you need section-level evidence. "
         "Include specific technical details, mathematical notation where appropriate, "
@@ -162,6 +170,30 @@ def write_section(
         "previous_subsection": previous_subsection,
         "revision_instruction": revision_instruction or None,
     }
+    consistency_context = _consistency_context_from_state(tool_state)
+    if consistency_context is not None:
+        user_payload["consistency_context"] = consistency_context
+    reflection_tips = _reflection_tips_from_state(tool_state)
+    if reflection_tips:
+        user_payload["writing_tips_from_experience"] = reflection_tips
+    chapter_plan = tool_state.get("chapter_plan", {})
+    chapter_id = str(chapter_plan.get("chapter_id", "")).strip() if isinstance(chapter_plan, dict) else ""
+    chapter_briefs, evidence_gaps = _chapter_reference_context_from_state(
+        tool_state,
+        chapter_id=chapter_id,
+    )
+    if chapter_briefs:
+        user_payload["reference_briefs"] = chapter_briefs
+    if evidence_gaps:
+        user_payload["evidence_gaps"] = evidence_gaps
+    argument_plan = _argument_plan_from_briefs(
+        llm,
+        subtask={"title": subtask_title, "description": ""},
+        chapter_briefs=chapter_briefs,
+        language=language,
+    )
+    if argument_plan is not None:
+        user_payload["argument_plan"] = argument_plan
     user = json.dumps(user_payload, ensure_ascii=False)
 
     llm_call_failed = False
