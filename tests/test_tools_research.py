@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from types import SimpleNamespace
 
 
 class ResearchToolTests(unittest.TestCase):
@@ -61,11 +62,33 @@ class ResearchToolTests(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertEqual(result[0]["ref_id"], "@lamport1982")
 
-    def test_web_search_returns_string(self):
+    def test_web_search_returns_stub_without_provider(self):
         from muse.tools.research import web_search
 
-        result = web_search.invoke({"query": "LangGraph documentation"})
+        result = web_search.func(query="LangGraph documentation", runtime=None)
         self.assertIsInstance(result, str)
+        self.assertIn("No web search provider configured", result)
+
+    def test_web_search_uses_runtime_provider_when_available(self):
+        from muse.tools.research import web_search
+
+        calls = []
+
+        class _WebSearchClient:
+            def search(self, query):
+                calls.append(query)
+                return [{"title": "LangGraph Docs", "url": "https://example.com/langgraph"}]
+
+        runtime = SimpleNamespace(
+            context=SimpleNamespace(
+                services=SimpleNamespace(web_search_client=_WebSearchClient())
+            )
+        )
+
+        result = web_search.func(query="LangGraph documentation", runtime=runtime)
+
+        self.assertEqual(calls, ["LangGraph documentation"])
+        self.assertEqual(json.loads(result)[0]["title"], "LangGraph Docs")
 
     def test_web_fetch_returns_string(self):
         from muse.tools.research import web_fetch

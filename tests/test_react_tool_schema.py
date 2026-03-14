@@ -11,7 +11,7 @@ class ReactToolSchemaTests(unittest.TestCase):
     def test_runtime_injected_tools_produce_openai_schema(self):
         from muse.tools.citation import crosscheck_metadata, entailment_check, verify_doi
         from muse.tools.composition import check_terminology, check_transitions, rewrite_passage
-        from muse.tools.research import academic_search, retrieve_local_refs
+        from muse.tools.research import academic_search, retrieve_local_refs, web_search
         from muse.tools.review import self_review
         from muse.tools.writing import revise_section, write_section
 
@@ -21,6 +21,7 @@ class ReactToolSchemaTests(unittest.TestCase):
             entailment_check,
             academic_search,
             retrieve_local_refs,
+            web_search,
             write_section,
             revise_section,
             self_review,

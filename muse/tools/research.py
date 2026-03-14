@@ -89,10 +89,24 @@ def _state_from_runtime(runtime: MuseToolRuntime | None) -> dict[str, Any]:
 
 
 @tool
-def web_search(query: str) -> str:
+def web_search(
+    query: str,
+    *,
+    runtime: Annotated[MuseToolRuntime, InjectedToolArg],
+) -> str:
     """Search the web for general knowledge relevant to thesis writing."""
 
-    return f"[web_search] No web search provider configured. Query: {query}"
+    services = _services_from_runtime(runtime)
+    web_search_client = getattr(services, "web_search_client", None)
+    if web_search_client is None:
+        return f"[web_search] No web search provider configured. Query: {query}"
+
+    try:
+        results = web_search_client.search(query)
+    except Exception as exc:  # noqa: BLE001
+        return f"[web_search] Search failed: {exc}. Query: {query}"
+
+    return json.dumps(results, ensure_ascii=False)
 
 
 @tool
