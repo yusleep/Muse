@@ -1,10 +1,18 @@
 import unittest
 
 from muse.graph.helpers.review_state import build_revision_instructions
+from muse.graph.state import MuseState
 from muse.schemas import hydrate_thesis_state, new_thesis_state, validate_thesis_state
 
 
 class ThesisStateSchemaTests(unittest.TestCase):
+    def test_muse_state_exposes_global_review_fields(self):
+        hints = MuseState.__annotations__
+
+        self.assertIn("quality_scores", hints)
+        self.assertIn("review_notes", hints)
+        self.assertIn("revision_instructions", hints)
+
     def test_new_state_contains_required_keys(self):
         state = new_thesis_state(
             project_id="p1",
