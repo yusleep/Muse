@@ -9,6 +9,7 @@ from .polish import build_polish_node
 from .ref_analysis import build_ref_analysis_node
 from .review import build_chapter_review_node, build_global_review_node, build_interrupt_node
 from .search import build_search_node
+from .single_pass import build_single_pass_node
 
 __all__ = [
     "build_chapter_review_node",
@@ -24,4 +25,5 @@ __all__ = [
     "build_polish_node",
     "build_ref_analysis_node",
     "build_search_node",
+    "build_single_pass_node",
 ]

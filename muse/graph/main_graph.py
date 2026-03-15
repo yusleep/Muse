@@ -22,6 +22,7 @@ from muse.graph.nodes import (
     build_coherence_check_node,
     build_ref_analysis_node,
     build_search_node,
+    build_single_pass_node,
 )
 from muse.graph.nodes.draft import (
     build_prepare_next_chapter_node,
@@ -75,6 +76,18 @@ def _default_settings() -> Settings:
         refs_dir=None,
         checkpoint_dir=None,
     )
+
+
+def _writing_mode_route(settings: Settings):
+    writing_mode = str(getattr(settings, "writing_mode", "sequential") or "sequential").strip().lower()
+
+    def route(state: dict[str, Any]) -> str:
+        del state
+        if writing_mode == "single_pass":
+            return "single_pass_writer"
+        return "prepare_next_chapter"
+
+    return route
 
 
 def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
@@ -156,6 +169,15 @@ def build_graph(
         _wrap(
             build_ref_analysis_node(services=services),
             "ref_analysis",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "single_pass_writer",
+        _wrap(
+            build_single_pass_node(settings=settings, services=services),
+            "single_pass_writer",
             settings,
             services,
         ),
@@ -259,7 +281,14 @@ def build_graph(
     builder.add_edge("search_perspectives", "outline")
     builder.add_edge("outline", "approve_outline")
     builder.add_edge("approve_outline", "ref_analysis")
-    builder.add_edge("ref_analysis", "prepare_next_chapter")
+    builder.add_conditional_edges(
+        "ref_analysis",
+        _writing_mode_route(settings),
+        {
+            "prepare_next_chapter": "prepare_next_chapter",
+            "single_pass_writer": "single_pass_writer",
+        },
+    )
     builder.add_conditional_edges(
         "prepare_next_chapter",
         next_chapter_route,
@@ -267,6 +296,7 @@ def build_graph(
     )
     builder.add_edge("chapter_subgraph", "update_cross_chapter_state")
     builder.add_edge("update_cross_chapter_state", "prepare_next_chapter")
+    builder.add_edge("single_pass_writer", "merge_chapters")
     if review_mode == "classic":
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "citation_subgraph")

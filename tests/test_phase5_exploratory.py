@@ -1,7 +1,8 @@
+import json
 import tempfile
 import unittest
 
-from muse.config import Settings
+from muse.config import Settings, _yaml_to_settings
 
 
 class _PerspectiveLLM:
@@ -79,6 +80,40 @@ class _Services:
         self.search = search
         self.local_refs = []
         self.rag_index = None
+
+
+class _SinglePassLLM:
+    def __init__(self):
+        self.calls = []
+
+    def text(self, *, system, user, route="default", temperature=0.2, max_tokens=2500):
+        del system, route, temperature, max_tokens
+        payload = json.loads(user)
+        self.calls.append(payload)
+        chapter_plan = payload["chapter_plan"]
+        chapter_id = chapter_plan["chapter_id"]
+        chapter_title = chapter_plan["chapter_title"]
+        subtask = chapter_plan["subtask_plan"][0]
+        claim = f"{chapter_title} improves thesis quality."
+        return json.dumps(
+            {
+                "merged_text": f"{chapter_title} content with citation.",
+                "quality_scores": {"coherence": 4, "logic": 4},
+                "iterations_used": 1,
+                "subtask_results": [
+                    {
+                        "subtask_id": subtask["subtask_id"],
+                        "title": subtask["title"],
+                        "target_words": subtask["target_words"],
+                        "output_text": f"{chapter_title} subsection content.",
+                        "actual_words": 5,
+                        "citations_used": ["@smith2024graph"],
+                        "key_claims": [claim],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        )
 
 
 class Phase5PerspectiveTests(unittest.TestCase):
@@ -191,6 +226,111 @@ class Phase5PerspectiveTests(unittest.TestCase):
             self.assertIn(("review_refs", "perspective_discovery"), edges)
             self.assertIn(("perspective_discovery", "search_perspectives"), edges)
             self.assertIn(("search_perspectives", "outline"), edges)
+
+
+class Phase5SinglePassTests(unittest.TestCase):
+    def test_yaml_extracts_writing_mode(self):
+        self.assertEqual(
+            _yaml_to_settings({"writing": {"mode": "single_pass"}}, {}, None)["writing_mode"],
+            "single_pass",
+        )
+        self.assertEqual(
+            _yaml_to_settings({"writing_mode": "single_pass"}, {}, None)["writing_mode"],
+            "single_pass",
+        )
+
+    def test_single_pass_writer_builds_chapter_results_for_merge_node(self):
+        from muse.graph.nodes.merge import build_merge_chapters_node
+        from muse.graph.nodes.single_pass import build_single_pass_node
+
+        llm = _SinglePassLLM()
+        node = build_single_pass_node(
+            settings=Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir="runs",
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            ),
+            services=_Services(llm=llm),
+        )
+        state = {
+            "topic": "LangGraph thesis automation",
+            "discipline": "Computer Science",
+            "language": "zh",
+            "references": [
+                {
+                    "ref_id": "@smith2024graph",
+                    "title": "Graph Systems",
+                    "authors": ["Alice Smith"],
+                    "year": 2024,
+                    "abstract": "Graph-native orchestration study.",
+                }
+            ],
+            "chapter_plans": [
+                {
+                    "chapter_id": "ch_01",
+                    "chapter_title": "绪论",
+                    "target_words": 1200,
+                    "subtask_plan": [{"subtask_id": "s1", "title": "研究背景", "target_words": 1200}],
+                },
+                {
+                    "chapter_id": "ch_02",
+                    "chapter_title": "系统设计",
+                    "target_words": 1200,
+                    "subtask_plan": [{"subtask_id": "s1", "title": "总体架构", "target_words": 1200}],
+                },
+            ],
+        }
+
+        result = node(state)
+
+        self.assertEqual(set(result["chapters"].keys()), {"ch_01", "ch_02"})
+        self.assertEqual(result["chapters"]["ch_01"]["iterations_used"], 1)
+        self.assertTrue(result["chapters"]["ch_02"]["citation_uses"])
+        self.assertIn("conversation_history", llm.calls[1])
+        self.assertIn("previous_chapters", llm.calls[1])
+
+        merge = build_merge_chapters_node(None, None)
+        merged = merge({**state, **result})
+        self.assertEqual(len(merged["paper_package"]["chapter_results"]), 2)
+        self.assertIn("绪论 content", merged["final_text"])
+        self.assertIn("系统设计 content", merged["final_text"])
+
+    def test_graph_adds_single_pass_writer_route(self):
+        from muse.graph.launcher import build_graph
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+            object.__setattr__(settings, "writing_mode", "single_pass")
+
+            graph = build_graph(
+                settings,
+                services=_Services(llm=_PerspectiveLLM(), search=_PerspectiveSearchClient()),
+                thread_id="run-single-pass",
+            )
+            graph_repr = graph.get_graph()
+            edges = {(edge.source, edge.target) for edge in graph_repr.edges}
+
+            self.assertIn("single_pass_writer", graph_repr.nodes)
+            self.assertIn(("ref_analysis", "single_pass_writer"), edges)
+            self.assertIn(("single_pass_writer", "merge_chapters"), edges)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ class Settings:
     local_papers_dir: str = ""
     local_priority: bool = True
     review_mode: str = "classic"
+    writing_mode: str = "sequential"
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +233,12 @@ def _yaml_to_settings(
     review = yaml_cfg.get("review", {})
     if isinstance(review, dict) and review.get("mode"):
         kw["review_mode"] = str(review["mode"]).strip().lower()
+
+    writing = yaml_cfg.get("writing", {})
+    if isinstance(writing, dict) and writing.get("mode"):
+        kw["writing_mode"] = str(writing["mode"]).strip().lower()
+    elif yaml_cfg.get("writing_mode"):
+        kw["writing_mode"] = str(yaml_cfg["writing_mode"]).strip().lower()
 
     return kw
 
