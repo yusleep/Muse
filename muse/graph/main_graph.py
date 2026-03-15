@@ -17,10 +17,13 @@ from muse.graph.nodes import (
     build_interrupt_node,
     build_merge_chapters_node,
     build_outline_node,
+    build_perspective_node,
     build_polish_node,
     build_coherence_check_node,
     build_ref_analysis_node,
     build_search_node,
+    build_single_pass_node,
+    build_visual_check_node,
 )
 from muse.graph.nodes.draft import (
     build_prepare_next_chapter_node,
@@ -76,6 +79,18 @@ def _default_settings() -> Settings:
     )
 
 
+def _writing_mode_route(settings: Settings):
+    writing_mode = str(getattr(settings, "writing_mode", "sequential") or "sequential").strip().lower()
+
+    def route(state: dict[str, Any]) -> str:
+        del state
+        if writing_mode == "single_pass":
+            return "single_pass_writer"
+        return "prepare_next_chapter"
+
+    return route
+
+
 def _wrap(node_fn, node_name: str, settings: Settings, services: Any):
     """Wrap a node function with the default middleware chain."""
 
@@ -128,6 +143,24 @@ def build_graph(
     )
     builder.add_node("review_refs", build_interrupt_node("research", auto_approve=auto_approve))
     builder.add_node(
+        "perspective_discovery",
+        _wrap(
+            build_perspective_node(services=services),
+            "perspective_discovery",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "search_perspectives",
+        _wrap(
+            build_search_node(settings, services, state_query_key="perspective_queries"),
+            "search_perspectives",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "outline",
         _wrap(build_outline_node(settings, services), "outline", settings, services),
     )
@@ -137,6 +170,15 @@ def build_graph(
         _wrap(
             build_ref_analysis_node(services=services),
             "ref_analysis",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "single_pass_writer",
+        _wrap(
+            build_single_pass_node(settings=settings, services=services),
+            "single_pass_writer",
             settings,
             services,
         ),
@@ -230,15 +272,33 @@ def build_graph(
     builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
     builder.add_node(
         "export",
-        _wrap(build_export_node(settings), "export", settings, services),
+        _wrap(build_export_node(settings, services=services), "export", settings, services),
+    )
+    builder.add_node(
+        "visual_check",
+        _wrap(
+            build_visual_check_node(services=services),
+            "visual_check",
+            settings,
+            services,
+        ),
     )
     builder.add_edge(START, "initialize")
     builder.add_edge("initialize", "search")
     builder.add_edge("search", "review_refs")
-    builder.add_edge("review_refs", "outline")
+    builder.add_edge("review_refs", "perspective_discovery")
+    builder.add_edge("perspective_discovery", "search_perspectives")
+    builder.add_edge("search_perspectives", "outline")
     builder.add_edge("outline", "approve_outline")
     builder.add_edge("approve_outline", "ref_analysis")
-    builder.add_edge("ref_analysis", "prepare_next_chapter")
+    builder.add_conditional_edges(
+        "ref_analysis",
+        _writing_mode_route(settings),
+        {
+            "prepare_next_chapter": "prepare_next_chapter",
+            "single_pass_writer": "single_pass_writer",
+        },
+    )
     builder.add_conditional_edges(
         "prepare_next_chapter",
         next_chapter_route,
@@ -246,6 +306,7 @@ def build_graph(
     )
     builder.add_edge("chapter_subgraph", "update_cross_chapter_state")
     builder.add_edge("update_cross_chapter_state", "prepare_next_chapter")
+    builder.add_edge("single_pass_writer", "merge_chapters")
     if review_mode == "classic":
         builder.add_edge("merge_chapters", "coherence_check")
         builder.add_edge("coherence_check", "citation_subgraph")
@@ -262,5 +323,6 @@ def build_graph(
     builder.add_edge("polish", "composition_subgraph")
     builder.add_edge("composition_subgraph", "approve_final")
     builder.add_edge("approve_final", "export")
-    builder.add_edge("export", END)
+    builder.add_edge("export", "visual_check")
+    builder.add_edge("visual_check", END)
     return builder.compile(checkpointer=checkpointer)

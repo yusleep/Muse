@@ -25,6 +25,8 @@ class MuseState(TypedDict, total=False):
 
     references: Annotated[list[dict[str, Any]], operator.add]
     search_queries: list[str]
+    perspectives: list[dict[str, Any]]
+    perspective_queries: list[str]
     literature_summary: str
     paper_index_ready: bool
     indexed_papers: Annotated[dict[str, dict[str, Any]], _merge_dict]
@@ -71,6 +73,7 @@ class MuseState(TypedDict, total=False):
     output_filepath: str
     export_artifacts: dict[str, Any]
     export_warnings: list[str]
+    visual_issues: list[dict[str, Any]]
 
     review_feedback: Annotated[list[dict[str, Any]], operator.add]
     rag_enabled: bool
