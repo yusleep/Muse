@@ -24,6 +24,9 @@ class ThesisState(TypedDict):
     references: list[ReferenceRecord]
     search_queries: list[str]
     literature_summary: str
+    perspectives: list[dict[str, Any]]
+    perspective_queries: list[str]
+    visual_issues: list[dict[str, Any]]
     quality_scores: dict[str, Any]
     review_notes: list[dict[str, Any]]
     review_history: list[dict[str, Any]]
@@ -73,6 +76,9 @@ _REQUIRED_KEYS = {
     "references",
     "search_queries",
     "literature_summary",
+    "perspectives",
+    "perspective_queries",
+    "visual_issues",
     "citation_uses",
     "claim_text_by_id",
     "verified_citations",
@@ -102,6 +108,9 @@ _DEFAULT_OPTIONAL_FIELDS: dict[str, Any] = {
     "consistency_data": {},
     "reflection_data": {},
     "reference_briefs": {},
+    "perspectives": [],
+    "perspective_queries": [],
+    "visual_issues": [],
     "quality_scores": {},
     "review_notes": [],
     "review_history": [],
@@ -162,6 +171,9 @@ def new_thesis_state(
         consistency_data={},
         reflection_data={},
         reference_briefs={},
+        perspectives=[],
+        perspective_queries=[],
+        visual_issues=[],
         references=[],
         search_queries=[],
         literature_summary="",

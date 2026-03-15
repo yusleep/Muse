@@ -22,8 +22,12 @@ def build_merge_chapters_node(settings: Any, services: Any):
             if plan.get("chapter_id") in chapter_lookup
         ]
         citation_uses: list[dict[str, Any]] = []
+        claim_text_by_id: dict[str, str] = {}
         for chapter in chapter_results:
             citation_uses.extend(chapter.get("citation_uses", []))
+            chapter_claims = chapter.get("claim_text_by_id", {})
+            if isinstance(chapter_claims, dict):
+                claim_text_by_id.update(chapter_claims)
 
         thesis_summary = _build_thesis_summary(chapter_results)
         return {
@@ -32,6 +36,7 @@ def build_merge_chapters_node(settings: Any, services: Any):
                 "thesis_summary": thesis_summary,
             },
             "citation_uses": citation_uses,
+            "claim_text_by_id": claim_text_by_id,
             "thesis_summary": thesis_summary,
             "final_text": "\n\n".join(ch.get("merged_text", "") for ch in chapter_results if ch.get("merged_text")),
         }
