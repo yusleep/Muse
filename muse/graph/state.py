@@ -73,6 +73,7 @@ class MuseState(TypedDict, total=False):
     output_filepath: str
     export_artifacts: dict[str, Any]
     export_warnings: list[str]
+    visual_issues: list[dict[str, Any]]
 
     review_feedback: Annotated[list[dict[str, Any]], operator.add]
     rag_enabled: bool

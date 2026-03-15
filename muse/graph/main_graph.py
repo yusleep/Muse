@@ -23,6 +23,7 @@ from muse.graph.nodes import (
     build_ref_analysis_node,
     build_search_node,
     build_single_pass_node,
+    build_visual_check_node,
 )
 from muse.graph.nodes.draft import (
     build_prepare_next_chapter_node,
@@ -273,6 +274,15 @@ def build_graph(
         "export",
         _wrap(build_export_node(settings, services=services), "export", settings, services),
     )
+    builder.add_node(
+        "visual_check",
+        _wrap(
+            build_visual_check_node(services=services),
+            "visual_check",
+            settings,
+            services,
+        ),
+    )
     builder.add_edge(START, "initialize")
     builder.add_edge("initialize", "search")
     builder.add_edge("search", "review_refs")
@@ -313,5 +323,6 @@ def build_graph(
     builder.add_edge("polish", "composition_subgraph")
     builder.add_edge("composition_subgraph", "approve_final")
     builder.add_edge("approve_final", "export")
-    builder.add_edge("export", END)
+    builder.add_edge("export", "visual_check")
+    builder.add_edge("visual_check", END)
     return builder.compile(checkpointer=checkpointer)

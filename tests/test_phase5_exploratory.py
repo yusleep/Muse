@@ -1,7 +1,9 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from muse.config import Settings, _yaml_to_settings
 
@@ -129,6 +131,21 @@ class _OptimizerLLM:
                 "Write one thesis subsection with citations. "
                 "For every key claim, ground it in an explicit cited finding."
             )
+        }
+
+
+class _VisualLLM:
+    def structured(self, *, system, user, route="default", max_tokens=2500):
+        del system, user, route, max_tokens
+        return {
+            "issues": [
+                {
+                    "page": 1,
+                    "type": "float_drift",
+                    "description": "Figure is too far from its discussion.",
+                    "fix_suggestion": "Tighten figure placement.",
+                }
+            ]
         }
 
 
@@ -471,6 +488,99 @@ class Phase5PromptOptimizerTests(unittest.TestCase):
             )
 
             self.assertEqual(seen_systems[0], "OPTIMIZED SECTION PROMPT")
+
+
+class Phase5VisualCheckTests(unittest.TestCase):
+    def test_visual_check_skips_when_pdf_artifact_missing(self):
+        from muse.graph.nodes.visual_check import build_visual_check_node
+
+        node = build_visual_check_node(services=_Services())
+        result = node(
+            {
+                "output_format": "latex",
+                "export_artifacts": {"pdf_path": None},
+                "export_warnings": [],
+            }
+        )
+
+        self.assertEqual(result["visual_issues"], [])
+        self.assertTrue(any("pdf artifact unavailable" in warning for warning in result["export_warnings"]))
+
+    def test_visual_check_extracts_pdf_page_summaries_and_returns_issues(self):
+        from muse.graph.nodes.visual_check import build_visual_check_node
+
+        class _FakePage:
+            rect = SimpleNamespace(width=595, height=842)
+
+            def get_text(self, mode=None):
+                if mode == "blocks":
+                    return [(0, 0, 100, 100, "Page block", 0, 0)]
+                return "Sample page text."
+
+        class _FakeDocument:
+            def __len__(self):
+                return 1
+
+            def load_page(self, index):
+                del index
+                return _FakePage()
+
+            def close(self):
+                return None
+
+        fake_fitz = SimpleNamespace(open=lambda path: _FakeDocument())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "thesis.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7 fake")
+            node = build_visual_check_node(services=_Services(llm=_VisualLLM()))
+
+            old_fitz = sys.modules.get("fitz")
+            sys.modules["fitz"] = fake_fitz
+            try:
+                result = node(
+                    {
+                        "output_format": "latex",
+                        "export_artifacts": {"pdf_path": str(pdf_path)},
+                        "export_warnings": [],
+                    }
+                )
+            finally:
+                if old_fitz is None:
+                    sys.modules.pop("fitz", None)
+                else:
+                    sys.modules["fitz"] = old_fitz
+
+        self.assertEqual(result["visual_issues"][0]["type"], "float_drift")
+        self.assertEqual(result["visual_issues"][0]["page"], 1)
+
+    def test_graph_inserts_visual_check_after_export(self):
+        from muse.graph.launcher import build_graph
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+            graph = build_graph(
+                settings,
+                services=_Services(llm=_PerspectiveLLM(), search=_PerspectiveSearchClient()),
+                thread_id="run-visual",
+            )
+            graph_repr = graph.get_graph()
+            edges = {(edge.source, edge.target) for edge in graph_repr.edges}
+
+            self.assertIn("visual_check", graph_repr.nodes)
+            self.assertIn(("export", "visual_check"), edges)
+            self.assertIn(("visual_check", "__end__"), edges)
 
 
 if __name__ == "__main__":

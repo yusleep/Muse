@@ -10,6 +10,7 @@ from .ref_analysis import build_ref_analysis_node
 from .review import build_chapter_review_node, build_global_review_node, build_interrupt_node
 from .search import build_search_node
 from .single_pass import build_single_pass_node
+from .visual_check import build_visual_check_node
 
 __all__ = [
     "build_chapter_review_node",
@@ -26,4 +27,5 @@ __all__ = [
     "build_ref_analysis_node",
     "build_search_node",
     "build_single_pass_node",
+    "build_visual_check_node",
 ]
