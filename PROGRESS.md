@@ -3,9 +3,9 @@
 ## 总览
 
 - **状态**：进行中
-- **总进度**：4/5 phases, 23/28 steps
-- **当前 Wave**：Wave 4
-- **下一步**：Phase 5 Step 5.1
+- **总进度**：4/5 phases, 24/28 steps
+- **当前 Wave**：Wave 5
+- **下一步**：Phase 5 Step 5.2
 
 ---
 
@@ -58,8 +58,8 @@
 
 ## Wave 5 — Exploratory
 
-### Phase 5: Exploratory Enhancements (0/5)
-- [ ] Step 5.1: STORM 模拟对话视角发现 (~265 行)
+### Phase 5: Exploratory Enhancements (1/5)
+- [x] Step 5.1: STORM 模拟对话视角发现 (~265 行)
 - [ ] Step 5.2: 单 Pass 写作模式 (~98 行)
 - [ ] Step 5.3: Agent 自进化 — LLM 分析弱项生成 prompt 改进 (~200 行)
 - [ ] Step 5.4: 导出后视觉验证 — PDF → VLM 检查 (~190 行)
@@ -87,3 +87,4 @@
 - 2026-03-14: 完成 Phase 4 Step 4.3，新增 ReflectionBank，从 review_history 提炼正负修订经验，并把经验 tips 注入写作路径
 - 2026-03-14: 完成 Phase 4 Step 4.4，新增 ref_analysis 节点与 reference_briefs 状态，并把章节级文献摘要/证据缺口注入写作路径
 - 2026-03-14: 完成 Phase 4 Step 4.5，在 legacy/ReAct 写作路径中新增 argument_plan 预规划，并过滤 evidence_chain 中不在 reference_briefs 的 source
+- 2026-03-15: 完成 Phase 5 Step 5.1，在 search 与 outline 之间新增 perspective_discovery + 二轮搜索，并对增量 references/search_queries 做去重合并

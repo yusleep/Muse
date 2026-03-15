@@ -17,6 +17,7 @@ from muse.graph.nodes import (
     build_interrupt_node,
     build_merge_chapters_node,
     build_outline_node,
+    build_perspective_node,
     build_polish_node,
     build_coherence_check_node,
     build_ref_analysis_node,
@@ -128,6 +129,24 @@ def build_graph(
     )
     builder.add_node("review_refs", build_interrupt_node("research", auto_approve=auto_approve))
     builder.add_node(
+        "perspective_discovery",
+        _wrap(
+            build_perspective_node(services=services),
+            "perspective_discovery",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
+        "search_perspectives",
+        _wrap(
+            build_search_node(settings, services, state_query_key="perspective_queries"),
+            "search_perspectives",
+            settings,
+            services,
+        ),
+    )
+    builder.add_node(
         "outline",
         _wrap(build_outline_node(settings, services), "outline", settings, services),
     )
@@ -235,7 +254,9 @@ def build_graph(
     builder.add_edge(START, "initialize")
     builder.add_edge("initialize", "search")
     builder.add_edge("search", "review_refs")
-    builder.add_edge("review_refs", "outline")
+    builder.add_edge("review_refs", "perspective_discovery")
+    builder.add_edge("perspective_discovery", "search_perspectives")
+    builder.add_edge("search_perspectives", "outline")
     builder.add_edge("outline", "approve_outline")
     builder.add_edge("approve_outline", "ref_analysis")
     builder.add_edge("ref_analysis", "prepare_next_chapter")
