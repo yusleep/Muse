@@ -2,10 +2,10 @@
 
 ## 总览
 
-- **状态**：进行中
-- **总进度**：4/5 phases, 27/28 steps
+- **状态**：已完成
+- **总进度**：5/5 phases, 28/28 steps
 - **当前 Wave**：Wave 5
-- **下一步**：Phase 5 Step 5.5
+- **下一步**：全部完成
 
 ---
 
@@ -58,12 +58,12 @@
 
 ## Wave 5 — Exploratory
 
-### Phase 5: Exploratory Enhancements (4/5)
+### Phase 5: Exploratory Enhancements (5/5)
 - [x] Step 5.1: STORM 模拟对话视角发现 (~265 行)
 - [x] Step 5.2: 单 Pass 写作模式 (~98 行)
 - [x] Step 5.3: Agent 自进化 — LLM 分析弱项生成 prompt 改进 (~200 行)
 - [x] Step 5.4: 导出后视觉验证 — PDF → VLM 检查 (~190 行)
-- [ ] Step 5.5: 人类大纲 Heuristics — Few-shot 模板注入 (~95 行)
+- [x] Step 5.5: 人类大纲 Heuristics — Few-shot 模板注入 (~95 行)
 
 ---
 
@@ -91,3 +91,4 @@
 - 2026-03-15: 完成 Phase 5 Step 5.2，新增 writing_mode=single_pass 与 single_pass_writer 分支，并让章节结果保持 merge/citation 兼容 shape
 - 2026-03-15: 完成 Phase 5 Step 5.3，新增 runs_dir/_prompt_bank 持久化 prompt optimizer，在 export 后记录分数并生成待验证 prompt 变体，write_section 下次优先试用
 - 2026-03-15: 完成 Phase 5 Step 5.4，在 export 后新增 visual_check，使用 PyMuPDF 页面摘要 + LLM 结构化判断做 best-effort PDF 视觉验证
+- 2026-03-15: 完成 Phase 5 Step 5.5，新增 BUPT-like 大纲 few-shot 样例库，并将按学科筛选的 examples 注入 outline_gen_prompt

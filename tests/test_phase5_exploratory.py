@@ -583,5 +583,38 @@ class Phase5VisualCheckTests(unittest.TestCase):
             self.assertIn(("visual_check", "__end__"), edges)
 
 
+class Phase5OutlineExampleTests(unittest.TestCase):
+    def test_outline_examples_select_computer_science_corpus(self):
+        from muse.prompts.outline_examples import get_examples_for_discipline
+
+        examples = get_examples_for_discipline("Computer Science")
+
+        self.assertGreaterEqual(len(examples), 5)
+        self.assertTrue(any("系统" in example["title"] or "网络" in example["title"] for example in examples))
+
+    def test_outline_examples_fallback_for_unknown_discipline(self):
+        from muse.prompts.outline_examples import get_examples_for_discipline
+
+        examples = get_examples_for_discipline("History of Art")
+
+        self.assertTrue(examples)
+        self.assertTrue(any(example.get("discipline") == "generic" for example in examples))
+
+    def test_outline_prompt_injects_examples_into_system_prompt(self):
+        from muse.prompts.outline_gen import outline_gen_prompt
+
+        system, user = outline_gen_prompt(
+            topic="LangGraph thesis automation",
+            discipline="Computer Science",
+            language="zh",
+            lit_summary="Graph orchestration literature.",
+            topic_analysis={"research_gaps": ["durability"]},
+        )
+
+        self.assertIn("excellent thesis outline examples", system)
+        self.assertIn("系统", system)
+        self.assertIn("topic_analysis", user)
+
+
 if __name__ == "__main__":
     unittest.main()
