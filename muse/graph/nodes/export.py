@@ -5,8 +5,11 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 
+from muse.graph.helpers.prompt_optimizer import PromptOptimizer
+from muse.prompts.section_write import BASE_SECTION_WRITE_SYSTEM_PROMPT
 from muse.services.store import RunStore
 
 
@@ -92,6 +95,85 @@ def _write_export_artifacts(
     }
 
 
+def _aggregate_quality_scores(chapter_results: list[dict[str, Any]]) -> dict[str, float]:
+    buckets: dict[str, list[float]] = {}
+    for chapter in chapter_results:
+        if not isinstance(chapter, dict):
+            continue
+        scores = chapter.get("quality_scores", {})
+        if not isinstance(scores, dict):
+            continue
+        for key, value in scores.items():
+            if isinstance(value, (int, float)):
+                buckets.setdefault(str(key), []).append(float(value))
+    return {
+        key: sum(values) / len(values)
+        for key, values in buckets.items()
+        if values
+    }
+
+
+def _run_prompt_optimizer(
+    *,
+    state: dict[str, Any],
+    settings: Any,
+    services: Any | None,
+    run_id: str,
+) -> tuple[dict[str, Any], list[str]]:
+    llm = getattr(services, "llm", None) if services is not None else None
+    chapter_results = _chapter_results_from_state(state)
+    aggregated_scores = _aggregate_quality_scores(chapter_results)
+    if not aggregated_scores:
+        return {}, []
+
+    optimizer = PromptOptimizer(Path(settings.runs_dir) / "_prompt_bank")
+    selected_prompt = optimizer.select_prompt(
+        "section_write",
+        BASE_SECTION_WRITE_SYSTEM_PROMPT,
+    )
+    selected_prompt_id = optimizer.record_result(
+        "section_write",
+        selected_prompt,
+        aggregated_scores,
+        run_id=run_id,
+        baseline_prompt=BASE_SECTION_WRITE_SYSTEM_PROMPT,
+    )
+    weaknesses = optimizer.analyze_weakness(aggregated_scores)
+    summary = {
+        "prompt_name": "section_write",
+        "active_prompt_id": selected_prompt_id,
+        "scores": aggregated_scores,
+        "weaknesses": weaknesses,
+    }
+    warnings: list[str] = []
+
+    if not weaknesses:
+        return summary, warnings
+
+    try:
+        candidate_prompt = optimizer.generate_improvement(
+            "section_write",
+            selected_prompt,
+            weaknesses,
+            llm,
+        )
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"prompt optimizer skipped: {exc}")
+        return summary, warnings
+
+    if candidate_prompt and candidate_prompt.strip() != selected_prompt.strip():
+        candidate_id = optimizer.add_candidate(
+            "section_write",
+            candidate_prompt,
+            weaknesses,
+            source_prompt_id=selected_prompt_id,
+            source_run_id=run_id,
+            baseline_prompt=BASE_SECTION_WRITE_SYSTEM_PROMPT,
+        )
+        summary["candidate_prompt_id"] = candidate_id
+    return summary, warnings
+
+
 def _run_export(
     state: dict[str, Any],
     store: Any,
@@ -164,10 +246,11 @@ def _pandoc_export(md_path: str, output_path: str, fmt: str) -> None:
     raise ValueError(f"_pandoc_export: unsupported fmt {fmt!r}")
 
 
-def build_export_node(settings: Any):
+def build_export_node(settings: Any, services: Any | None = None):
     store = RunStore(base_dir=settings.runs_dir)
 
     def export(state: dict[str, Any]) -> dict[str, Any]:
+        run_id = state.get("project_id", "run")
         temp_state = {
             "final_text": state.get("final_text", ""),
             "chapter_results": state.get("paper_package", {}).get("chapter_results", []),
@@ -185,18 +268,29 @@ def build_export_node(settings: Any):
         _, outputs = _run_export(
             temp_state,
             store,
-            state.get("project_id", "run"),
+            run_id,
             output_format=state.get("output_format", "markdown"),
         )
+        optimizer_summary, optimizer_warnings = _run_prompt_optimizer(
+            state=temp_state,
+            settings=settings,
+            services=services,
+            run_id=run_id,
+        )
+        export_warnings = list(outputs.get("export_warnings", []))
+        export_warnings.extend(optimizer_warnings)
+        paper_package = {
+            **state.get("paper_package", {}),
+            "export_artifacts": outputs.get("export_artifacts", {}),
+            "export_warnings": export_warnings,
+        }
+        if optimizer_summary:
+            paper_package["prompt_optimizer"] = optimizer_summary
         return {
             "output_filepath": outputs.get("output_filepath", ""),
             "export_artifacts": outputs.get("export_artifacts", {}),
-            "export_warnings": outputs.get("export_warnings", []),
-            "paper_package": {
-                **state.get("paper_package", {}),
-                "export_artifacts": outputs.get("export_artifacts", {}),
-                "export_warnings": outputs.get("export_warnings", []),
-            },
+            "export_warnings": export_warnings,
+            "paper_package": paper_package,
         }
 
     return export

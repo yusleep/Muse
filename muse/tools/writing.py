@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 from typing import Annotated
 from typing import Any
 
@@ -9,6 +10,7 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import InjectedToolArg
 from langchain_core.tools import tool
 
+from muse.graph.helpers.prompt_optimizer import PromptOptimizer
 from muse.graph.helpers.draft_support import (
     _argument_plan_from_briefs,
     _build_refs_snapshot,
@@ -16,6 +18,8 @@ from muse.graph.helpers.draft_support import (
     _consistency_context_from_state,
     _reflection_tips_from_state,
 )
+from muse.prompts.section_write import BASE_SECTION_WRITE_SYSTEM_PROMPT
+from muse.prompts.section_write import section_write_system_prompt
 from muse.tools._context import AgentRuntimeContext
 from muse.tools.orchestration import append_partial_subtask_result
 
@@ -102,6 +106,19 @@ def _append_partial_result(
     )
 
 
+def _resolve_section_prompt(services: Any) -> str:
+    settings = getattr(services, "settings", None)
+    runs_dir = getattr(settings, "runs_dir", "") if settings is not None else ""
+    if not runs_dir:
+        return BASE_SECTION_WRITE_SYSTEM_PROMPT
+    optimizer = PromptOptimizer(Path(runs_dir) / "_prompt_bank")
+    selected_prompt = optimizer.select_prompt(
+        "section_write",
+        BASE_SECTION_WRITE_SYSTEM_PROMPT,
+    )
+    return section_write_system_prompt(selected_prompt)
+
+
 @tool
 def write_section(
     chapter_title: str,
@@ -138,24 +155,7 @@ def write_section(
 
     refs_snapshot = _build_refs_snapshot(state=tool_state, references=references)
 
-    system = (
-        "Write one thesis subsection with citations. "
-        "IMPORTANT: for citations_used, use ONLY ref_id values from the available_references list. "
-        "Do not invent citation keys not in that list. "
-        "SCOPE GUARD: Write ONLY about the topic defined in subtask.title. "
-        "Do NOT include content that belongs to other subtasks. "
-        "If a related topic is outside this subtask's scope, mention it briefly "
-        "and note that it will be covered in a later section. "
-        "If an argument_plan is provided, follow its logical_flow and make each paragraph execute one step "
-        "of the evidence_chain. "
-        "References marked source=local are author-provided core papers and should be prioritized when relevant. "
-        "For references marked indexed=true, use get_paper_section when you need section-level evidence. "
-        "Include specific technical details, mathematical notation where appropriate, "
-        "and reference concrete experimental results. "
-        "Return JSON with keys: text, citations_used (list of ref_id strings), key_claims (list), "
-        "transition_out, glossary_additions (object), "
-        "self_assessment (object with confidence, weak_spots, needs_revision)."
-    )
+    system = _resolve_section_prompt(services)
     user_payload: dict[str, Any] = {
         "topic": topic,
         "chapter_title": chapter_title,

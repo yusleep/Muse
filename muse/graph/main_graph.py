@@ -271,7 +271,7 @@ def build_graph(
     builder.add_node("approve_final", build_interrupt_node("final", auto_approve=auto_approve))
     builder.add_node(
         "export",
-        _wrap(build_export_node(settings), "export", settings, services),
+        _wrap(build_export_node(settings, services=services), "export", settings, services),
     )
     builder.add_edge(START, "initialize")
     builder.add_edge("initialize", "search")

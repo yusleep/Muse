@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 
 from muse.config import Settings, _yaml_to_settings
 
@@ -114,6 +115,21 @@ class _SinglePassLLM:
             },
             ensure_ascii=False,
         )
+
+
+class _OptimizerLLM:
+    def __init__(self):
+        self.systems = []
+
+    def structured(self, *, system, user, route="default", max_tokens=2500):
+        del route, max_tokens
+        self.systems.append((system, json.loads(user)))
+        return {
+            "improved_prompt": (
+                "Write one thesis subsection with citations. "
+                "For every key claim, ground it in an explicit cited finding."
+            )
+        }
 
 
 class Phase5PerspectiveTests(unittest.TestCase):
@@ -331,6 +347,130 @@ class Phase5SinglePassTests(unittest.TestCase):
             self.assertIn("single_pass_writer", graph_repr.nodes)
             self.assertIn(("ref_analysis", "single_pass_writer"), edges)
             self.assertIn(("single_pass_writer", "merge_chapters"), edges)
+
+
+class Phase5PromptOptimizerTests(unittest.TestCase):
+    def test_export_node_records_scores_and_generates_prompt_candidate(self):
+        from muse.graph.nodes.export import build_export_node
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+            services = _Services(llm=_OptimizerLLM())
+            node = build_export_node(settings, services=services)
+            node(
+                {
+                    "project_id": "run-optimizer",
+                    "paper_package": {
+                        "chapter_results": [
+                            {
+                                "chapter_id": "ch_01",
+                                "chapter_title": "绪论",
+                                "merged_text": "Chapter text.",
+                                "quality_scores": {"citation": 2, "logic": 4},
+                            }
+                        ]
+                    },
+                    "final_text": "Chapter text.",
+                    "flagged_citations": [],
+                    "references": [],
+                    "citation_uses": [],
+                    "output_format": "markdown",
+                }
+            )
+
+            bank_path = Path(tmp) / "_prompt_bank" / "section_write.json"
+            self.assertTrue(bank_path.exists())
+            bank = json.loads(bank_path.read_text(encoding="utf-8"))
+            self.assertEqual(bank["baseline"]["runs"], 1)
+            self.assertEqual(bank["variants"][0]["status"], "trial_pending")
+            self.assertIn("citation", bank["variants"][0]["weaknesses"])
+
+    def test_write_section_uses_pending_prompt_variant_on_next_run(self):
+        from muse.prompts.section_write import BASE_SECTION_WRITE_SYSTEM_PROMPT
+        from muse.tools._context import set_services
+        from muse.tools.writing import write_section
+        from muse.graph.helpers.prompt_optimizer import PromptOptimizer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings(
+                llm_api_key="x",
+                llm_base_url="http://localhost",
+                llm_model="stub",
+                model_router_config={},
+                runs_dir=tmp,
+                semantic_scholar_api_key=None,
+                openalex_email=None,
+                crossref_mailto=None,
+                refs_dir=None,
+                checkpoint_dir=None,
+            )
+            optimizer = PromptOptimizer(Path(tmp) / "_prompt_bank")
+            optimizer.record_result(
+                "section_write",
+                BASE_SECTION_WRITE_SYSTEM_PROMPT,
+                {"citation": 4, "logic": 4},
+                run_id="run-baseline",
+            )
+            optimizer.add_candidate(
+                "section_write",
+                "OPTIMIZED SECTION PROMPT",
+                ["citation"],
+                source_prompt_id="baseline",
+                source_run_id="run-baseline",
+            )
+
+            seen_systems = []
+
+            class _CaptureLLM:
+                def structured(self, *, system, user, route="default", max_tokens=2500):
+                    del user, route, max_tokens
+                    seen_systems.append(system)
+                    return {
+                        "text": "Generated section text about the topic.",
+                        "citations_used": ["@smith2024"],
+                        "key_claims": ["Claim A."],
+                        "transition_out": "",
+                        "glossary_additions": {},
+                        "self_assessment": {
+                            "confidence": 0.7,
+                            "weak_spots": [],
+                            "needs_revision": False,
+                        },
+                    }
+
+            runtime_services = type(
+                "_RuntimeServices",
+                (),
+                {
+                    "llm": _CaptureLLM(),
+                    "settings": settings,
+                },
+            )()
+
+            set_services(runtime_services)
+            write_section.func(
+                chapter_title="Introduction",
+                subtask_id="sub_01",
+                subtask_title="Background",
+                target_words=1200,
+                topic="LangGraph thesis automation",
+                language="zh",
+                references_json='[{"ref_id": "@smith2024", "title": "Graph Systems", "year": 2024, "abstract": "A study."}]',
+                runtime=None,
+            )
+
+            self.assertEqual(seen_systems[0], "OPTIMIZED SECTION PROMPT")
 
 
 if __name__ == "__main__":
